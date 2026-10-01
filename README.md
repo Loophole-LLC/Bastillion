@@ -32,8 +32,8 @@ systems — like a bastion host with a friendly dashboard. It does two things:
 - Save and re-run **Composite Scripts** across a whole fleet at once
 - Stack **TLS/SSL over SSH** for extra protection
 
-![Multiple terminals broadcasting the same command to three hosts at once](docs/screenshots/web-terminal.png)
-<p align="center"><sub>Three real, independent SSH sessions — one command, typed once, run everywhere.</sub></p>
+![Two live terminals showing process information and a directory listing](docs/screenshots/web-terminal.png)
+<p align="center"><sub>Two live SSH sessions to the existing web and application example hosts.</sub></p>
 
 ---
 
@@ -72,7 +72,7 @@ passphrase you supply, then pushes its own public key into that host's `authoriz
 From then on it connects using that key — no stored passwords, ever. Status flips to
 **Success** the moment the key is in place.
 
-![Manage Systems — three hosts registered, all showing Success status](docs/screenshots/manage-systems.png)
+![Manage Systems — five example hosts registered, all showing Success status](docs/screenshots/manage-systems.png)
 
 ### 3. Group systems into Profiles, assign Users
 
@@ -81,7 +81,7 @@ Tier." Users are then linked to profiles under **Manage → Users**, which is th
 that controls who can reach what. Revoke a profile assignment and that access is gone
 immediately, no key rotation needed.
 
-![Assigning three systems to a Production profile](docs/screenshots/assign-systems.png)
+![Five example systems assigned to the Production profile](docs/screenshots/assign-systems.png)
 
 ### 4. Open terminals — and broadcast to all of them at once
 
@@ -90,7 +90,7 @@ resizable, xterm-based terminals in the browser, side by side. Type once, and it
 every terminal marked active — the same keystroke, the same command, the same output shape,
 across as many hosts as you selected.
 
-![A health-check command broadcast to three terminals simultaneously, same output shape across all three](docs/screenshots/web-terminal.png)
+![Process information and a directory listing in two selected terminals](docs/screenshots/web-terminal.png)
 
 ### 5. Rotate or revoke keys centrally
 
