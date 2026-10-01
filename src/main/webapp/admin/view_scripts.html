@@ -9,24 +9,27 @@
 <head>
 
     <meta th:replace="~{_res/inc/header}">
+    <script th:src="@{/_res/js/confirm-action.js}"></script>
 
     <script th:inline="javascript">
         /*<![CDATA[*/
         $(document).ready(function () {
 
             //call delete action
-            $(".del_btn").button().click(function () {
+            $(".del_btn").click(function () {
                 var id = $(this).attr('id').replace("del_btn_", "");
-                window.location = 'deleteScript.ktrl?script.id=' + id + '&sortedSet.orderByDirection=' + /*[[${sortedSet.orderByDirection}]]*/ ''
-                    + '&sortedSet.orderByField=' + /*[[${sortedSet.orderByField}]]*/ ''
-                    + '&_csrf=' + [[${session._csrf}]];
+                confirmAction(this, function () {
+                    window.location = 'deleteScript.ktrl?script.id=' + id + '&sortedSet.orderByDirection=' + /*[[${sortedSet.orderByDirection}]]*/ ''
+                        + '&sortedSet.orderByField=' + /*[[${sortedSet.orderByField}]]*/ ''
+                        + '&_csrf=' + [[${session._csrf}]];
+                });
             });
             //submit add or edit form
-            $(".submit_btn").button().click(function () {
+            $(".submit_btn").click(function () {
                 $(this).parents('.modal').find('form').submit();
             });
 
-            $(".sort,.sortAsc,.sortDesc").click(function () {
+            $(".sort").click(function () {
                 var id = $(this).attr('id')
 
                 var orderDirection = $('#viewScripts_sortedSet_orderByDirection');
@@ -41,7 +44,8 @@
 
             });
             [# th:if= "${!#strings.isEmpty(sortedSet.orderByField)}"]
-                $('#' + [[${sortedSet.orderByField}]]).attr('class', [[${sortedSet.orderByDirection}]]);
+                $('#' + [[${sortedSet.orderByField}]]).attr('class', [[${sortedSet.orderByDirection}]])
+                    .attr('aria-sort', [[${sortedSet.orderByDirection}]] === 'asc' ? 'ascending' : 'descending');
             [/]
 
         });
@@ -86,7 +90,7 @@
             <thead>
             <tr>
                 <th th:id="${@io.bastillion.manage.db.ScriptDB@SORT_BY_DISPLAY_NM}" class="sort">Script Name</th>
-                <th>&#xA0;</th>
+                <th><span class="visually-hidden">Actions</span></th>
             </tr>
             </thead>
             <tbody>
@@ -101,17 +105,18 @@
                                 th:href="'viewSystems.ktrl?script.id=' + ${s.id} + '&amp;_csrf=' + ${session._csrf}">
 
                             <button th:id="'exec_btn_' + ${s.id}"
-                                    class="btn btn-secondary edit_btn spacer spacer-left">Execute Script
+                                    class="btn btn-secondary edit_btn">Execute Script
 
                             </button>
                         </a>
-                            <button class="btn btn-secondary spacer spacer-middle"
+                            <button class="btn btn-secondary edit_btn"
                                     data-bs-toggle="modal" th:attr="data-bs-target='#edit_dialog_' + ${s.id}">Edit
                             </button>
                             <button th:id="'del_btn_' + ${s.id}"
-                                    class="btn btn-secondary del_btn spacer spacer-right">Delete
+                                    data-confirm-title="Delete script"
+                                    th:attr="data-confirm='Delete ' + ${s.displayNm} + '? The saved commands are removed.'"
+                                    class="btn btn-secondary del_btn">Delete
                             </button>
-                            <div style="clear:both"></div>
                         </div>
                     </td>
                 </tr>
@@ -223,6 +228,7 @@
         </div>
     </template>
 </div>
+<div th:replace="~{_res/inc/confirm}"></div>
 </body>
 
 </html>

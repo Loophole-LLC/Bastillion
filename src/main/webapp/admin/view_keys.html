@@ -8,31 +8,34 @@
 
 <head>
     <meta th:replace="~{_res/inc/header}">
+    <script th:src="@{/_res/js/confirm-action.js}"></script>
 
     <script th:inline="javascript">
         /*<![CDATA[*/
         $(document).ready(function () {
 
             //call delete action
-            $(".del_btn").button().click(function () {
+            $(".del_btn").click(function () {
                 var id = $(this).attr('id').replace("del_btn_", "");
-                window.location = 'deletePublicKey.ktrl?publicKey.id=' + id + '&sortedSet.orderByDirection=' + /*[[${sortedSet.orderByDirection}]]*/ ''
-                    + '&sortedSet.orderByField=' + /*[[${sortedSet.orderByField}]]*/ ''
-                    + '&_csrf=' + [[${session._csrf}]];
+                confirmAction(this, function () {
+                    window.location = 'deletePublicKey.ktrl?publicKey.id=' + id + '&sortedSet.orderByDirection=' + /*[[${sortedSet.orderByDirection}]]*/ ''
+                        + '&sortedSet.orderByField=' + /*[[${sortedSet.orderByField}]]*/ ''
+                        + '&_csrf=' + [[${session._csrf}]];
 
+                });
             });
             //submit add or edit form
-            $(".submit_btn").button().click(function () {
+            $(".submit_btn").click(function () {
                 $(this).parents('.modal').find('form').submit();
             });
 
             //regenerate auth keys btn
-            $(".gen_auth_keys_btn").button().click(function () {
+            $(".gen_auth_keys_btn").click(function () {
                 $("#gen_auth_keys").submit();
             });
 
 
-            $(".sort,.sortAsc,.sortDesc").click(function () {
+            $(".sort").click(function () {
                 var id = $(this).attr('id')
 
                 var orderDirection = $('#viewKeys_sortedSet_orderByDirection');
@@ -48,7 +51,8 @@
             });
 
             [# th:if= "${!#strings.isEmpty(sortedSet.orderByField)}"]
-                $('#' + [[${sortedSet.orderByField}]]).attr('class', [[${sortedSet.orderByDirection}]]);
+                $('#' + [[${sortedSet.orderByField}]]).attr('class', [[${sortedSet.orderByDirection}]])
+                    .attr('aria-sort', [[${sortedSet.orderByDirection}]] === 'asc' ? 'ascending' : 'descending');
             [/]
 
             [# th:if= "${session.privateKey != null}"]
@@ -132,7 +136,7 @@
         <table th:if="${#strings.equals(session.userType, 'M')}">
             <tr>
                 <td class="align_left"><a th:href="'../manage/viewKeys.ktrl?_csrf=' + ${session._csrf}"
-                                          class="btn btn-danger">Review Key Access</a>
+                                          class="btn btn-success">Review Key Access</a>
                 </td>
             </tr>
         </table>
@@ -154,7 +158,7 @@
                 <th th:id="${@io.bastillion.manage.db.PublicKeyDB@SORT_BY_CREATE_DT}"
                     class="sort">Created
                 </th>
-                <th>&#xA0;</th>
+                <th><span class="visually-hidden">Actions</span></th>
             </tr>
             </thead>
             <tbody>
@@ -171,13 +175,14 @@
                     <td th:text="${#dates.format(p.createDt, 'dd-MMM-yyyy')}"></td>
                     <td>
                         <div>
-                            <button th:if="${!forceUserKeyGenEnabled}" class="btn btn-secondary spacer spacer-left"
+                            <button th:if="${!forceUserKeyGenEnabled}" class="btn btn-secondary edit_btn"
                                     data-bs-toggle="modal" th:attr="data-bs-target='#edit_dialog_' + ${p.id}">Edit
                             </button>
                             <button th:id="'del_btn_' + ${p.id}"
-                                    class="btn btn-secondary del_btn spacer spacer-right">Delete
-                            </button>&#xA0;&#xA0;&#xA0;
-                            <div style="clear:both"></div>
+                                    data-confirm-title="Delete SSH key"
+                                    th:attr="data-confirm='Delete ' + ${p.keyNm} + '? It is removed from the systems it gives access to.'"
+                                    class="btn btn-secondary del_btn">Delete
+                            </button>
                         </div>
                     </td>
                 </tr>
@@ -461,6 +466,7 @@
         </div>
     </template>
 </div>
+<div th:replace="~{_res/inc/confirm}"></div>
 </body>
 
 </html>

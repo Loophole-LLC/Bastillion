@@ -15,21 +15,12 @@
         $(document).ready(function () {
 
 
-            $(".terminals_btn").button().click(function () {
+            $(".terminals_btn").click(function () {
                 var id = $(this).attr('id').replace("terminals_btn_", "");
                 window.location = 'getTermsForSession.ktrl?sessionId=' + id + '&_csrf=' + [[${session._csrf}]];
             });
 
-            $("#view_btn").button().click(function () {
-                $("#viewSessions").submit();
-            });
-
-            //submit add or edit form
-            $(".submit_btn").button().click(function () {
-                $(this).parents('form:first').submit();
-            });
-
-            $(".sort,.sortAsc,.sortDesc").click(function () {
+            $(".sort").click(function () {
                 var id = $(this).attr('id')
 
                 var orderDirection = $('#viewSessions_sortedSet_orderByDirection');
@@ -44,7 +35,8 @@
 
             });
             [# th:if= "${!#strings.isEmpty(sortedSet.orderByField)}"]
-                $('#' + [[${sortedSet.orderByField}]]).attr('class', [[${sortedSet.orderByDirection}]]);
+                $('#' + [[${sortedSet.orderByField}]]).attr('class', [[${sortedSet.orderByDirection}]])
+                    .attr('aria-sort', [[${sortedSet.orderByDirection}]] === 'asc' ? 'ascending' : 'descending');
             [/]
         });
         /*]]>*/
@@ -90,7 +82,7 @@
                                 </select>
                             </td>
                             <td style="padding:5px 5px 0px 5px;">
-                                <div id="view_btn" class="btn btn-secondary">Filter</div>
+                                <button type="submit" id="view_btn" class="btn btn-secondary">Filter</button>
                             </td>
                         </tr>
                     </table>
@@ -117,7 +109,7 @@
                 <th th:id="${@io.bastillion.manage.db.SessionAuditDB@SORT_BY_SESSION_TM}"
                     class="sort">Session Time
                 </th>
-                <th>&#xA0;</th>
+                <th><span class="visually-hidden">Actions</span></th>
             </tr>
             </thead>
             <tbody>
@@ -129,9 +121,9 @@
                     <td th:text="${s.ipAddress}"></td>
                     <td th:text="${#dates.format(s.sessionTm, 'dd-MMM-yyyy hh:mm:ss aa')}"></td>
                     <td>
-                        <div th:id="'terminals_btn_' + ${s.id}" class="btn btn-secondary terminals_btn">
+                        <button type="button" th:id="'terminals_btn_' + ${s.id}" class="btn btn-secondary terminals_btn">
                             Audit
-                        </div>
+                        </button>
                     </td>
                 </tr>
             </template>

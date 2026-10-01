@@ -13,11 +13,7 @@
     <script th:inline="javascript">
         /*<![CDATA[*/
         $(document).ready(function () {
-            $("#view_btn").button().click(function () {
-                $("#viewSystems").submit();
-            });
-
-            $(".select_frm_btn").button().click(function () {
+            $(".select_frm_btn").click(function () {
                 $("#select_frm").submit();
             });
             //select all check boxes
@@ -29,7 +25,7 @@
                 }
             });
 
-            $(".sort,.sortAsc,.sortDesc").click(function () {
+            $(".sort").click(function () {
                 var id = $(this).attr('id')
 
                 var orderDirection = $('#viewSystems_sortedSet_orderByDirection');
@@ -44,7 +40,8 @@
 
             });
             [# th:if= "${!#strings.isEmpty(sortedSet.orderByField)}"]
-                $('#' + [[${sortedSet.orderByField}]]).attr('class', [[${sortedSet.orderByDirection}]]);
+                $('#' + [[${sortedSet.orderByField}]]).attr('class', [[${sortedSet.orderByDirection}]])
+                    .attr('aria-sort', [[${sortedSet.orderByDirection}]] === 'asc' ? 'ascending' : 'descending');
             [/]
         });
         /*]]>*/
@@ -101,7 +98,7 @@
                         </select>
                     </td>
                     <td>
-                        <div id="view_btn" class="btn btn-secondary">Filter</div>
+                        <button type="submit" id="view_btn" class="btn btn-secondary">Filter</button>
                     </td>
                 </tr>
             </table>
@@ -142,14 +139,12 @@
             </table>
         </form>
     </div>
-    <div class="btn btn-secondary select_frm_btn spacer spacer-bottom" th:if="${script != null && script.id != null && sortedSet.itemList != null && !sortedSet.itemList.empty}">Execute Script</div>
-    <div class="btn btn-secondary select_frm_btn spacer spacer-bottom"
-         th:if="${(script == null || script.id == null) && sortedSet.itemList != null && !sortedSet.itemList.empty}">Create Terminals</div>
-    <div class="actionMessage" th:if="${(script == null || script.id == null) && (sortedSet.itemList == null || sortedSet.itemList.empty)}">
-        <p class="error">Systems not available
-            <template th:if="${#strings.equals(session.userType,'M')}"
-                      th:remove="tag">(<a th:href="'../manage/viewSystems.ktrl?_csrf=' + ${session._csrf} ">Manage Systems</a>)</template>.</p>
-    </div>
+    <button type="button" class="btn btn-secondary select_frm_btn spacer spacer-bottom" th:if="${script != null && script.id != null && sortedSet.itemList != null && !sortedSet.itemList.empty}">Execute Script</button>
+    <button type="button" class="btn btn-secondary select_frm_btn spacer spacer-bottom"
+            th:if="${(script == null || script.id == null) && sortedSet.itemList != null && !sortedSet.itemList.empty}">Create Terminals</button>
+    <p class="error" th:if="${(script == null || script.id == null) && (sortedSet.itemList == null || sortedSet.itemList.empty)}">Systems not available
+        <template th:if="${#strings.equals(session.userType,'M')}"
+                  th:remove="tag">(<a th:href="'../manage/viewSystems.ktrl?_csrf=' + ${session._csrf} ">Manage Systems</a>)</template>.</p>
 </div>
 </body>
 

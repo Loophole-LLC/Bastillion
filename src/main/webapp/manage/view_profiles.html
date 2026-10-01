@@ -9,12 +9,13 @@
 <head>
 
     <meta th:replace="~{_res/inc/header}"/>
+    <script th:src="@{/_res/js/confirm-action.js}"></script>
 
     <script th:inline="javascript">
         /*<![CDATA[*/
         $(document).ready(function () {
 
-            $("#filter_btn").button().click(function () {
+            $("#filter_btn").click(function () {
                 if ($("#filterType").val() === 'U') {
                     $("#userFilter").val($("#profileFilter").val());
                     $("#systemFilter").val('');
@@ -26,7 +27,7 @@
                 $("#viewSystemsFilter").submit();
             });
 
-            $(".clear_btn").button().click(function () {
+            $(".clear_btn").click(function () {
                 $("#userFilter").val('');
                 $("#systemFilter").val('');
                 $("#profileFilter").val('');
@@ -34,18 +35,20 @@
             });
 
             //call delete action
-            $(".del_btn").button().click(function () {
+            $(".del_btn").click(function () {
                 var id = $(this).attr('id').replace("del_btn_", "");
-                window.location = 'deleteProfile.ktrl?profile.id=' + id + '&sortedSet.orderByDirection=' + /*[[${sortedSet.orderByDirection}]]*/ ''
-                    + '&sortedSet.orderByField=' + /*[[${sortedSet.orderByField}]]*/ ''
-                    + '&_csrf=' + [[${session._csrf}]];
+                confirmAction(this, function () {
+                    window.location = 'deleteProfile.ktrl?profile.id=' + id + '&sortedSet.orderByDirection=' + /*[[${sortedSet.orderByDirection}]]*/ ''
+                        + '&sortedSet.orderByField=' + /*[[${sortedSet.orderByField}]]*/ ''
+                        + '&_csrf=' + [[${session._csrf}]];
+                });
             });
             //submit add or edit form
-            $(".submit_btn").button().click(function () {
+            $(".submit_btn").click(function () {
                 $(this).parents('.modal').find('form').submit();
             });
 
-            $(".sort,.sortAsc,.sortDesc").click(function () {
+            $(".sort").click(function () {
                 var id = $(this).attr('id')
 
                 var orderDirection = $('#viewProfiles_sortedSet_orderByDirection');
@@ -59,7 +62,8 @@
 
             });
             [# th:if= "${!#strings.isEmpty(sortedSet.orderByField)}"]
-                $('#' + [[${sortedSet.orderByField}]]).attr('class', [[${sortedSet.orderByDirection}]]);
+                $('#' + [[${sortedSet.orderByField}]]).attr('class', [[${sortedSet.orderByDirection}]])
+                    .attr('aria-sort', [[${sortedSet.orderByDirection}]] === 'asc' ? 'ascending' : 'descending');
             [/]
 
         });
@@ -132,8 +136,8 @@
                                 </select>
                             </td>
                             <td>
-                                <div id="filter_btn" class="btn btn-secondary">Filter</div>
-                                <div class="btn btn-secondary clear_btn spacer spacer-right">Clear</div>
+                                <button type="button" id="filter_btn" class="btn btn-secondary">Filter</button>
+                                <button type="button" class="btn btn-secondary clear_btn">Clear</button>
                             </td>
                         </tr>
                     </table>
@@ -146,26 +150,29 @@
             <thead>
             <tr>
                 <th th:id="${@io.bastillion.manage.db.ProfileDB@SORT_BY_PROFILE_NM}" class="sort">Profile Name</th>
-                <th>&#xA0;</th>
+                <th>Description</th>
+                <th><span class="visually-hidden">Actions</span></th>
             </tr>
             </thead>
             <tbody>
             <template th:each="p : ${sortedSet.itemList}" th:remove="tag">
                 <tr>
                     <td th:text="${p.nm}"></td>
+                    <td th:text="${p.desc}"></td>
                     <td>
                         <div>
                             <a th:href="'viewProfileUsers.ktrl?profile.id=' + ${p.id} + '&amp;_csrf=' + ${session._csrf}" th:id="'user_assign_btn_' + ${p.id}"
-                               class="btn btn-secondary edit_btn spacer spacer-left">Assign Users</a>
+                               class="btn btn-secondary edit_btn">Assign Users</a>
                             <a th:href="'viewProfileSystems.ktrl?profile.id=' + ${p.id} + '&amp;_csrf=' + ${session._csrf}" th:id="'system_assign_btn_' + ${p.id}"
-                               class="btn btn-secondary edit_btn spacer spacer-left">Assign Systems</a>
-                            <button class="btn btn-secondary spacer spacer-middle"
+                               class="btn btn-secondary edit_btn">Assign Systems</a>
+                            <button class="btn btn-secondary edit_btn"
                                     data-bs-toggle="modal" th:attr="data-bs-target='#edit_dialog_' + ${p.id}">Edit
                             </button>
                             <button th:id="'del_btn_' + ${p.id}"
-                                    class="btn btn-secondary del_btn spacer spacer-right">Delete
+                                    data-confirm-title="Delete profile"
+                                    th:attr="data-confirm='Delete ' + ${p.nm} + '? Users who reach systems through this profile lose that access.'"
+                                    class="btn btn-secondary del_btn">Delete
                             </button>
-                            <div style="clear:both"></div>
                         </div>
                     </td>
                 </tr>
@@ -271,6 +278,7 @@
         </div>
     </template>
 </div>
+<div th:replace="~{_res/inc/confirm}"></div>
 </body>
 
 </html>

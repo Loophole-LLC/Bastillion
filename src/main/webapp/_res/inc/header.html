@@ -22,37 +22,25 @@
     <link rel="icon" th:href="@{/img/bastillion-logo.svg}" type="image/svg+xml"/>
     <link rel="stylesheet" type="text/css" th:href="@{/_res/node/css/jquery-ui/all.css}"/>
     <link rel="stylesheet" type="text/css" th:href="@{/_res/node/css/xterm.css}"/>
+    <!-- bootstrap.min.css already contains reboot, grid and utilities -->
     <link rel="stylesheet" type="text/css" th:href="@{/_res/node/css/bootstrap.min.css}"/>
-    <link rel="stylesheet" type="text/css" th:href="@{/_res/node/css/bootstrap-grid.min.css}"/>
-    <link rel="stylesheet" type="text/css" th:href="@{/_res/node/css/bootstrap-reboot.min.css}"/>
-    <link rel="stylesheet" type="text/css" th:href="@{/_res/node/css/bootstrap-utilities.min.css}"/>
     <link rel="stylesheet" type="text/css" th:href="@{/_res/css/bastillion.css}"/>
     <!-- Core libraries -->
     <script th:src="@{/_res/node/js/jquery.min.js}"></script>
     <script th:src="@{/_res/node/js/popper.min.js}"></script>
     <script th:src="@{/_res/node/js/bootstrap.min.js}"></script>
 
-    <!-- jQuery UI Core -->
+    <!-- jQuery UI core: only what sortable and resizable depend on -->
     <script th:src="@{/_res/node/js/jquery-ui/version.js}"></script>
     <script th:src="@{/_res/node/js/jquery-ui/widget.js}"></script>
-    <script th:src="@{/_res/node/js/jquery-ui/position.js}"></script>
     <script th:src="@{/_res/node/js/jquery-ui/data.js}"></script>
     <script th:src="@{/_res/node/js/jquery-ui/disable-selection.js}"></script>
-    <script th:src="@{/_res/node/js/jquery-ui/focusable.js}"></script>
-    <script th:src="@{/_res/node/js/jquery-ui/form-reset-mixin.js}"></script>
-    <script th:src="@{/_res/node/js/jquery-ui/keycode.js}"></script>
-    <script th:src="@{/_res/node/js/jquery-ui/labels.js}"></script>
     <script th:src="@{/_res/node/js/jquery-ui/plugin.js}"></script>
     <script th:src="@{/_res/node/js/jquery-ui/scroll-parent.js}"></script>
-    <script th:src="@{/_res/node/js/jquery-ui/tabbable.js}"></script>
-    <script th:src="@{/_res/node/js/jquery-ui/unique-id.js}"></script>
 
     <!-- jQuery UI Widgets -->
     <script th:src="@{/_res/node/js/jquery-ui/widgets/mouse.js}"></script>
-    <script th:src="@{/_res/node/js/jquery-ui/widgets/draggable.js}"></script>
-    <script th:src="@{/_res/node/js/jquery-ui/widgets/droppable.js}"></script>
     <script th:src="@{/_res/node/js/jquery-ui/widgets/resizable.js}"></script>
-    <script th:src="@{/_res/node/js/jquery-ui/widgets/selectable.js}"></script>
     <script th:src="@{/_res/node/js/jquery-ui/widgets/sortable.js}"></script>
 
     <!-- Extra libs -->
@@ -78,33 +66,25 @@
                 $(this).closest('.dropdown').children('.nav-link').addClass('active');
             });
 
-            $(function () {
-                // Several legacy templates use non-button elements for actions. Give those
-                // controls button semantics and complete keyboard support while the markup
-                // is gradually simplified.
-                var legacyButtons = $('.btn').filter('div, span');
-                legacyButtons.attr({'role': 'button', 'tabindex': '0'});
-                legacyButtons.on('keydown', function (event) {
-                    if (event.key !== 'Enter' && event.key !== ' ') return;
+            // Keep Enter-to-submit for text fields, with native form validation.
+            $('form input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="submit"]):not([type="button"])').on('keydown', function (event) {
+                if (event.key === 'Enter' && !event.isComposing && !event.originalEvent?.isComposing) {
                     event.preventDefault();
-                    if (!event.repeat && !$(this).is('.disabled, [aria-disabled="true"]')) {
-                        $(this).click();
-                    }
-                });
+                    this.form.requestSubmit();
+                }
+            });
 
-                $("form input, form select").keydown(function (event) {
-                    if (event.keyCode === 13) {
-                        event.preventDefault();
-                        $(this).closest("form").submit();
-                    }
-                });
+            // Native buttons make column sorting available to keyboard users.
+            $('th.sort').each(function () {
+                $(this).attr({'scope': 'col', 'aria-sort': 'none'})
+                    .wrapInner('<button type="button" class="table-sort-label"></button>');
+            });
 
-                $('[data-theme-toggle]').on('change', function () {
-                    var theme = this.checked ? 'dark' : 'light';
-                    $('#ui-theme-value').val(theme);
-                    document.documentElement.setAttribute('data-bs-theme', theme);
-                    $('#theme-color').attr('content', theme === 'light' ? '#f4f7f5' : '#080b10');
-                });
+            $('[data-theme-toggle]').on('change', function () {
+                var theme = this.checked ? 'dark' : 'light';
+                $('#ui-theme-value').val(theme);
+                document.documentElement.setAttribute('data-bs-theme', theme);
+                $('#theme-color').attr('content', theme === 'light' ? '#f4f7f5' : '#080b10');
             });
 
             var scrollWrapper = $('.scrollWrapper');
@@ -117,7 +97,7 @@
                 });
             }
 
-            $(':input:enabled:visible:first').focus();
+            $('input[autofocus]:enabled:visible').first().trigger('focus');
 
             $('.modal').on('shown.bs.modal', function () {
                 $(this).find('input:enabled:visible:first').focus();
@@ -139,10 +119,6 @@
                 }
                 return true;
             }).attr("accept-charset", "utf-8");
-
-            $(".submit_btn").button().click(function() {
-                $(this).closest('form').submit();
-            });
         });
 
         //break if loaded in frame

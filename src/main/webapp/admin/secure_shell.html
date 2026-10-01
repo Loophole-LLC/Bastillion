@@ -47,7 +47,7 @@
             });
 
             //submit
-            $(".submit_btn").button().click(function () {
+            $(".submit_btn").click(function () {
                 [# th:if= "${pendingSystemStatus != null && pendingSystemStatus.id != null}"]
                     $(this).parents('.modal').find('form').submit();
                 [/]
@@ -55,7 +55,7 @@
             });
 
             //close all forms
-            $(".cancel_btn").button().click(function () {
+            $(".cancel_btn").click(function () {
                 window.location = 'getNextPendingSystemForTerms.ktrl?pendingSystemStatus.id=' + /*[[${pendingSystemStatus.id}]]*/ ''
                     [# th:if= "${script != null && script.id > 0}"]
                         +'&script.id=' + /*[[${script.id}]]*/ ''
@@ -672,10 +672,6 @@
                 grid-template-columns: minmax(0, 1fr);
             }
         }
-        .term {
-            background: [[${userSettings.bg}]];
-        }
-
     </style>
     <title>Bastillion - Terminals</title>
 </head>
@@ -740,7 +736,7 @@
 <template th:if="${(systemList == null || systemList.empty) && pendingSystemStatus.id == null}"
           th:remove="tag">
     <div th:replace="~{_res/inc/navigation}"></div>
-    <div class="container">
+    <div class="container table-page">
         <h3>Terminals</h3>
         <p class="error">No sessions could be created</p>
     </div>
@@ -773,9 +769,9 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <button type="button" class="close cancel_btn" data-bs-dismiss="modal" aria-hidden="true">x</button>
                 <h6 class="modal-title"
                     th:text="'Enter password for ' + ${pendingSystemStatus.displayLabel}"></h6>
+                <button type="button" class="btn-close cancel_btn" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
                 <div class="row">
@@ -809,9 +805,9 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <button type="button" class="close cancel_btn" data-bs-dismiss="modal" aria-hidden="true">x</button>
                 <h6 class="modal-title"
                     th:text="'Enter passphrase for ' + ${pendingSystemStatus.displayLabel}"></h6>
+                <button type="button" class="btn-close cancel_btn" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
                 <div class="row">

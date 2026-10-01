@@ -36,88 +36,74 @@
         <div class="list-group">
             <template th:if="${#strings.equals(session.userType,'M')}" th:remove="tag">
                 <a th:href="'../manage/viewSystems.ktrl?_csrf=' + ${session._csrf}"
-                   class="list-group-item list-group-item-action list-group-item-light">
+                   class="list-group-item list-group-item-action">
                     <div class="d-flex w-100 justify-content-between">
-                        <span class="workspace-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="7" rx="2"/><rect x="4" y="14" width="16" height="7" rx="2"/><path d="M8 6.5h.01M8 17.5h.01M12 6.5h4M12 17.5h4"/></svg></span><h3 class="mb-1">Systems</h3>
+                        <span class="workspace-icon" aria-hidden="true"><svg width="24" height="24" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="8" rx="2"/><rect x="4" y="13" width="16" height="8" rx="2"/><path d="M8 7h.01M8 17h.01M12 7h4M12 17h4"/></svg></span><h3 class="mb-1">Systems</h3>
                     </div>
                     <p class="mb-1">Register hosts, distribute keys, and manage connections.</p>
                 </a>
                 <a th:href="'../manage/viewProfiles.ktrl?_csrf=' + ${session._csrf}"
-                   class="list-group-item list-group-item-action list-group-item-secondary">
+                   class="list-group-item list-group-item-action">
                     <div class="d-flex w-100 justify-content-between">
-                        <span class="workspace-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 9 5-9 5-9-5 9-5Zm-9 9 9 5 9-5M3 16l9 5 9-5"/></svg></span><h3 class="mb-1">Profiles</h3>
+                        <span class="workspace-icon" aria-hidden="true"><svg width="24" height="24" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 9 5-9 5-9-5 9-5Zm-9 9 9 5 9-5M3 16l9 5 9-5"/></svg></span><h3 class="mb-1">Profiles</h3>
                     </div>
                     <p class="mb-1">Group systems and control who can access them.</p>
                 </a>
                 <a th:href="'../manage/viewUsers.ktrl?_csrf=' + ${session._csrf}"
-                   class="list-group-item list-group-item-action list-group-item-light">
+                   class="list-group-item list-group-item-action">
                     <div class="d-flex w-100 justify-content-between">
-                        <span class="workspace-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M17 5a3 3 0 0 1 0 6M21 21v-3a6 6 0 0 0-4-5"/></svg></span><h3 class="mb-1">Users</h3>
+                        <span class="workspace-icon" aria-hidden="true"><svg width="24" height="24" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M17 5a3 3 0 0 1 0 6M21 21v-3a6 6 0 0 0-4-5"/></svg></span><h3 class="mb-1">Users</h3>
                     </div>
                     <p class="mb-1">Manage accounts, roles, and profile assignments.</p>
                 </a>
             </template>
             <a th:href="'../admin/viewSystems.ktrl?_csrf=' + ${session._csrf}"
-               class="list-group-item list-group-item-action list-group-item-secondary">
+               class="list-group-item list-group-item-action">
                 <div class="d-flex w-100 justify-content-between">
-                    <span class="workspace-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></svg></span><h3 class="mb-1">Terminals</h3>
+                    <span class="workspace-icon" aria-hidden="true"><svg width="24" height="24" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></svg></span><h3 class="mb-1">Terminals</h3>
                 </div>
                 <p class="mb-1">Run commands across selected systems.</p>
             </a>
             <a th:href="'../admin/viewScripts.ktrl?_csrf=' + ${session._csrf}"
-               class="list-group-item list-group-item-action list-group-item-light">
+               class="list-group-item list-group-item-action">
                 <div class="d-flex w-100 justify-content-between">
-                    <span class="workspace-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9l-6-6Zm0 0v6h6M8 13l-2 2 2 2M16 13l2 2-2 2M13 12l-2 6"/></svg></span><h3 class="mb-1">Composite Scripts</h3>
+                    <span class="workspace-icon" aria-hidden="true"><svg width="24" height="24" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9l-6-6Zm0 0v6h6M9 13l-2 2 2 2M15 13l2 2-2 2"/></svg></span><h3 class="mb-1">Composite Scripts</h3>
                 </div>
                 <p class="mb-1">Save commands to run across selected systems.</p>
             </a>
             <template th:if="${@io.bastillion.manage.util.SSHUtil@keyManagementEnabled}" th:remove="tag">
                 <a th:if="${#strings.equals(session.userType,'M')}"
                    th:href="'../manage/viewKeys.ktrl?_csrf=' + ${session._csrf}"
-                   class="list-group-item list-group-item-action list-group-item-secondary">
+                   class="list-group-item list-group-item-action">
                     <div class="d-flex w-100 justify-content-between">
-                        <span class="workspace-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5"/><path d="m12 12 9 9M16 16l3-3M18 18l3-3M7 7h.01"/></svg></span><h3 class="mb-1">Manage SSH Keys</h3>
+                        <span class="workspace-icon" aria-hidden="true"><svg width="24" height="24" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5"/><path d="m12 12 9 9M16 16l3-3M18 18l3-3M7 7h.01"/></svg></span><h3 class="mb-1">Manage SSH Keys</h3>
                     </div>
                     <p class="mb-1">Manage public keys and rotate administrative access.</p>
                 </a>
                 <a th:if="${!#strings.equals(session.userType,'M')}"
                    th:href="'../admin/viewKeys.ktrl?_csrf=' + ${session._csrf}"
-                   class="list-group-item list-group-item-action list-group-item-secondary">
+                   class="list-group-item list-group-item-action">
                     <div class="d-flex w-100 justify-content-between">
-                        <span class="workspace-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5"/><path d="m12 12 9 9M16 16l3-3M18 18l3-3M7 7h.01"/></svg></span><h3 class="mb-1">Manage SSH Keys</h3>
+                        <span class="workspace-icon" aria-hidden="true"><svg width="24" height="24" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5"/><path d="m12 12 9 9M16 16l3-3M18 18l3-3M7 7h.01"/></svg></span><h3 class="mb-1">Manage SSH Keys</h3>
                     </div>
                     <p class="mb-1">Manage your public SSH keys.</p>
                 </a>
             </template>
-            <template
-                    th:if="${@io.bastillion.manage.util.SessionOutputUtil@enableInternalAudit &&  #strings.equals(session.userType,'M')}"
-                    th:remove="tag">
-                <a th:href="'../manage/viewSessions.ktrl?_csrf=' + ${session._csrf}"
-                   class="list-group-item list-group-item-action list-group-item-light">
-                    <div class="d-flex w-100 justify-content-between">
-                        <span class="workspace-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><h3 class="mb-1">Audit Sessions</h3>
-                    </div>
-                    <p class="mb-1">Review recorded sessions and trace terminal activity.</p>
-                </a>
+            <a th:if="${@io.bastillion.manage.util.SessionOutputUtil@enableInternalAudit &&  #strings.equals(session.userType,'M')}"
+               th:href="'../manage/viewSessions.ktrl?_csrf=' + ${session._csrf}"
+               class="list-group-item list-group-item-action">
+                <div class="d-flex w-100 justify-content-between">
+                    <span class="workspace-icon" aria-hidden="true"><svg width="24" height="24" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><h3 class="mb-1">Audit Sessions</h3>
+                </div>
+                <p class="mb-1">Review recorded sessions and trace terminal activity.</p>
+            </a>
                 <a th:href="'../admin/userSettings.ktrl?_csrf=' + ${session._csrf}"
-                   class="list-group-item list-group-item-action list-group-item-secondary">
+                   class="list-group-item list-group-item-action">
                     <div class="d-flex w-100 justify-content-between">
-                        <span class="workspace-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/></svg></span><h3 class="mb-1">Settings</h3>
+                        <span class="workspace-icon" aria-hidden="true"><svg width="24" height="24" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h3M12 7h9M3 17h9M18 17h3"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/></svg></span><h3 class="mb-1">Settings</h3>
                     </div>
                     <p class="mb-1">Manage your account and appearance.</p>
                 </a>
-            </template>
-            <template
-                    th:if="${@io.bastillion.manage.util.SessionOutputUtil@enableInternalAudit == false ||  #strings.equals(session.userType,'A')}"
-                    th:remove="tag">
-                <a th:href="'../admin/userSettings.ktrl?_csrf=' + ${session._csrf}"
-                   class="list-group-item list-group-item-action list-group-item-light">
-                    <div class="d-flex w-100 justify-content-between">
-                        <span class="workspace-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/></svg></span><h3 class="mb-1">Settings</h3>
-                    </div>
-                    <p class="mb-1">Manage your account and appearance.</p>
-                </a>
-            </template>
         </div>
     </div>
 </main>

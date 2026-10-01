@@ -18,12 +18,12 @@
                 helper: 'clone'
             });
             //submit add or edit form
-            $(".submit_btn").button().click(function () {
+            $(".submit_btn").click(function () {
                 filterTerms();
             });
 
 
-            $(".clear_btn").button().click(function () {
+            $(".clear_btn").click(function () {
                 $('#filter').val('');
                 filterTerms();
             });
@@ -217,22 +217,20 @@
                     </li>
                 </ul>
 
-                <ul class="navbar-nav mb-2 mb-lg-0" style="float:right">
+                <ul class="navbar-nav mb-2 mb-lg-0">
                     <li class="nav-item">
-                        <label> <b>Audit ( <span th:text="${sessionAudit.username}"></span>
+                        <span class="audit-subject"> <b>Audit ( <span th:text="${sessionAudit.username}"></span>
                             <span th:if="${sessionAudit.lastNm != null}" th:text="' - ' + ${sessionAudit.lastNm} + ', ' + ${sessionAudit.firstNm}"></span> ) </b>
-                        </label>
-                    </li>
-                    <li class="nav-item">&nbsp;&nbsp;&nbsp;&nbsp;</li>
-                    <li class="nav-item">
-                        <input type="text" id="filter" name="filter" title="Filter" class="spacer spacer-left form-control">
-                    </li>
-                    <li class="nav-item">&nbsp;</li>
-                    <li class="nav-item">
-                        <div class="btn btn-secondary submit_btn spacer spacer-middle">Filter</div>
+                        </span>
                     </li>
                     <li class="nav-item">
-                        <div class="btn btn-secondary clear_btn spacer spacer-right">Clear</div>
+                        <input type="text" id="filter" name="filter" title="Filter" class="form-control">
+                    </li>
+                    <li class="nav-item">
+                        <button type="button" class="btn btn-secondary submit_btn">Filter</button>
+                    </li>
+                    <li class="nav-item">
+                        <button type="button" class="btn btn-secondary clear_btn">Clear</button>
                     </li>
                 </ul>
             </template>
@@ -255,7 +253,7 @@
         </template>
     </div>
 </div>
-<div class="container" th:if="${sessionAudit == null || sessionAudit.hostSystemList.empty}">
+<div class="container table-page" th:if="${sessionAudit == null || sessionAudit.hostSystemList.empty}">
     <div class="error">No terminals were recorded for this session (<a th:href="'../manage/viewSessions.ktrl?_csrf=' + ${session._csrf}">Audit Sessions</a>).</div>
 </div>
 </body>

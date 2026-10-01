@@ -22,6 +22,11 @@
 
     <div th:replace="~{_res/inc/errors}"></div>
 
+    <div class="settings-warning" th:if="${param.defaultPassword != null}">
+        <strong>You are signed in with the default password.</strong>
+        Set a new password below before using Bastillion.
+    </div>
+
     <div class="settings-grid">
         <section class="settings-card"
                  th:if="${!@io.bastillion.common.util.AuthSessionUtil@externalAuthEnabled || #strings.equals(session.authType,'BASIC')}">
@@ -53,7 +58,7 @@
                     </div>
                 </div>
                 <div class="settings-actions">
-                    <div id="change_btn" class="btn btn-secondary submit_btn">Change password</div>
+                    <button type="submit" id="change_btn" class="btn btn-secondary">Change password</button>
                 </div>
                 <input type="hidden" name="_csrf" th:value="${session._csrf}">
             </form>
@@ -100,7 +105,7 @@
                     </div>
                 </div>
                 <div class="settings-actions">
-                    <div id="theme_btn" class="btn btn-secondary submit_btn">Save appearance</div>
+                    <button type="submit" id="theme_btn" class="btn btn-secondary">Save appearance</button>
                 </div>
                 <input type="hidden" name="_csrf" th:value="${session._csrf}">
             </form>
@@ -159,7 +164,7 @@
                         <span>This key is already authorized on every registered system.</span>
                     </label>
                     <div class="settings-actions">
-                        <div id="import_key_btn" class="btn btn-danger submit_btn">Replace key</div>
+                        <button type="submit" id="import_key_btn" class="btn btn-danger">Replace key</button>
                     </div>
                     <input type="hidden" name="_csrf" th:value="${session._csrf}">
                 </form>

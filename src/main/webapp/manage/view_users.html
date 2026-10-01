@@ -9,29 +9,32 @@
 <head>
 
     <meta th:replace="~{_res/inc/header}">
+    <script th:src="@{/_res/js/confirm-action.js}"></script>
 
     <script th:inline="javascript">
         /*<![CDATA[*/
         $(document).ready(function () {
             //call delete action
-            $(".del_btn").button().click(function () {
+            $(".del_btn").click(function () {
                 var id = $(this).attr('id').replace("del_btn_", "");
-                window.location = 'deleteUser.ktrl?user.id=' + id + '&sortedSet.orderByDirection=' + /*[[${sortedSet.orderByDirection}]]*/ ''
-                    + '&sortedSet.orderByField=' + /*[[${sortedSet.orderByField}]]*/ ''
-                    + '&_csrf=' + [[${session._csrf}]];
+                confirmAction(this, function () {
+                    window.location = 'deleteUser.ktrl?user.id=' + id + '&sortedSet.orderByDirection=' + /*[[${sortedSet.orderByDirection}]]*/ ''
+                        + '&sortedSet.orderByField=' + /*[[${sortedSet.orderByField}]]*/ ''
+                        + '&_csrf=' + [[${session._csrf}]];
+                });
             });
             //call unlock action
-            $(".unlock_btn").button().click(function () {
+            $(".unlock_btn").click(function () {
                 var id = $(this).attr('id').replace("unlock_btn_", "");
                 window.location = 'unlockUser.ktrl?user.id=' + id + '&sortedSet.orderByDirection=' + /*[[${sortedSet.orderByDirection}]]*/ ''
                     + '&sortedSet.orderByField=' + /*[[${sortedSet.orderByField}]]*/ ''
                     + '&_csrf=' + [[${session._csrf}]];
             });
             //submit add or edit form
-            $(".submit_btn").button().click(function () {
+            $(".submit_btn").click(function () {
                 $(this).parents('.modal').find('form').submit();
             });
-            $(".sort,.sortAsc,.sortDesc").click(function () {
+            $(".sort").click(function () {
                 var id = $(this).attr('id');
 
                 var orderDirection = $('#viewUsers_sortedSet_orderByDirection');
@@ -46,7 +49,8 @@
 
             });
             [# th:if= "${!#strings.isEmpty(sortedSet.orderByField)}"]
-                $('#' + [[${sortedSet.orderByField}]]).attr('class', [[${sortedSet.orderByDirection}]]);
+                $('#' + [[${sortedSet.orderByField}]]).attr('class', [[${sortedSet.orderByDirection}]])
+                    .attr('aria-sort', [[${sortedSet.orderByDirection}]] === 'asc' ? 'ascending' : 'descending');
             [/]
 
             $('.auth_type').change(function () {
@@ -116,7 +120,7 @@
                 <th th:id="${@io.bastillion.manage.db.UserDB@EMAIL}" class="sort">Email Address</th>
                 <th th:id="${@io.bastillion.manage.db.UserDB@LAST_LOGIN_TM}"
                     class="sort">Last Login</th>
-                <th>&#xA0;</th>
+                <th><span class="visually-hidden">Actions</span></th>
             </tr>
             </thead>
             <tbody>
@@ -135,13 +139,14 @@
                 <td th:text="${#dates.format(u.lastLoginTm, 'dd-MMM-yyyy hh:mm:ss')}"></td>
                 <td>
                     <div>
-                        <button class="btn btn-secondary spacer spacer-left" data-bs-toggle="modal"
+                        <button class="btn btn-secondary edit_btn" data-bs-toggle="modal"
                                 th:attr="data-bs-target='#edit_dialog_' + ${u.id}">Edit</button>
                         <button th:if="${userId != u.id}" th:id="'del_btn_' + ${u.id}"
-                                class="btn btn-secondary del_btn spacer spacer-middle">Delete</button>
+                                data-confirm-title="Delete user"
+                                th:attr="data-confirm='Delete ' + ${u.username} + '? Their public keys are removed from every registered system.'"
+                                class="btn btn-secondary del_btn">Delete</button>
                         <button th:if="${u.expired}" th:id="'unlock_btn_' + ${u.id}"
-                                class="btn btn-secondary unlock_btn spacer spacer-middle">Unlock</button>
-                        <div style="clear:both"></div>
+                                class="btn btn-secondary unlock_btn">Unlock</button>
                     </div>
                 </td>
             </tr>
@@ -356,6 +361,7 @@
         </div>
     </template>
 </div>
+<div th:replace="~{_res/inc/confirm}"></div>
 </body>
 
 </html>

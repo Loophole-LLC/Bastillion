@@ -7,41 +7,7 @@
 <head>
     <meta th:replace="~{_res/inc/header}">
     <title>Bastillion - Assign Users to Profile</title>
-    <script>
-        $(function () {
-            var form = $('#assignUsersToProfile');
-            var choices = form.find('input[name="userSelectId"]');
-            var selectAll = $('#assignment-select-all');
-            function updateSelection() {
-                var selected = choices.filter(':checked').length;
-                selectAll.prop('checked', choices.length > 0 && selected === choices.length)
-                    .prop('indeterminate', selected > 0 && selected < choices.length);
-                $('#assignment-count').text(selected + ' of ' + choices.length + ' users selected');
-            }
-            selectAll.on('change', function () {
-                choices.prop('checked', this.checked);
-                updateSelection();
-            });
-            choices.on('change', updateSelection);
-            // Sort in place so pending checkbox changes survive reordering.
-            $('.assignment-sort').on('click', function () {
-                var button = $(this);
-                var header = button.closest('th');
-                var descending = header.attr('aria-sort') === 'ascending';
-                var column = header.index();
-                var rows = form.find('tbody tr').get();
-                rows.sort(function (a, b) {
-                    var result = a.cells[column].textContent.trim().localeCompare(
-                        b.cells[column].textContent.trim(), undefined, {numeric: true, sensitivity: 'base'});
-                    return descending ? -result : result;
-                });
-                form.find('th[aria-sort]').attr('aria-sort', 'none');
-                header.attr('aria-sort', descending ? 'descending' : 'ascending');
-                form.find('tbody').append(rows);
-            });
-            updateSelection();
-        });
-    </script>
+    <script th:src="@{/_res/js/assignment-table.js}"></script>
 </head>
 <body>
 <div th:replace="~{_res/inc/navigation}"></div>
@@ -58,7 +24,7 @@
                 <p th:if="${!#strings.isEmpty(profile.desc)}" th:text="${profile.desc}"></p>
             </div>
         </div>
-        <form id="assignUsersToProfile" th:action="@{/manage/assignUsersToProfile.ktrl}" method="post"
+        <form id="assignUsersToProfile" class="assignment-form" data-item-label="user" th:action="@{/manage/assignUsersToProfile.ktrl}" method="post"
               th:if="${sortedSet.itemList != null && !sortedSet.itemList.empty}">
             <input type="hidden" name="_csrf" th:value="${session._csrf}">
             <input type="hidden" name="profile.id" th:value="${profile.id}">
@@ -72,11 +38,11 @@
                     <thead>
                     <tr>
                         <th scope="col"><input type="checkbox" id="assignment-select-all" class="form-check-input" aria-label="Select all users"></th>
-                        <th scope="col" aria-sort="none"><button class="assignment-sort" type="button">Username <span aria-hidden="true">↕</span></button></th>
-                        <th scope="col" aria-sort="none" th:if="${@io.bastillion.common.util.AuthSessionUtil@externalAuthEnabled}"><button class="assignment-sort" type="button">Authentication <span aria-hidden="true">↕</span></button></th>
-                        <th scope="col" aria-sort="none"><button class="assignment-sort" type="button">Last name <span aria-hidden="true">↕</span></button></th>
-                        <th scope="col" aria-sort="none"><button class="assignment-sort" type="button">First name <span aria-hidden="true">↕</span></button></th>
-                        <th scope="col" aria-sort="none"><button class="assignment-sort" type="button">Email <span aria-hidden="true">↕</span></button></th>
+                        <th scope="col" aria-sort="none"><button class="assignment-sort" type="button">Username <span class="assignment-sort-icon" aria-hidden="true"></span></button></th>
+                        <th scope="col" aria-sort="none" th:if="${@io.bastillion.common.util.AuthSessionUtil@externalAuthEnabled}"><button class="assignment-sort" type="button">Authentication <span class="assignment-sort-icon" aria-hidden="true"></span></button></th>
+                        <th scope="col" aria-sort="none"><button class="assignment-sort" type="button">Last name <span class="assignment-sort-icon" aria-hidden="true"></span></button></th>
+                        <th scope="col" aria-sort="none"><button class="assignment-sort" type="button">First name <span class="assignment-sort-icon" aria-hidden="true"></span></button></th>
+                        <th scope="col" aria-sort="none"><button class="assignment-sort" type="button">Email <span class="assignment-sort-icon" aria-hidden="true"></span></button></th>
                     </tr>
                     </thead>
                     <tbody>

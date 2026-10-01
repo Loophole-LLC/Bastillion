@@ -137,7 +137,7 @@ public class LoginKtrl extends BaseKontroller {
                     case OTP_ENROLLMENT_REQUIRED -> retVal = "redirect:/admin/viewOTP.ktrl";
                     case SUCCESS -> retVal = "changeme".equals(auth.getPassword())
                             && Auth.AUTH_BASIC.equals(result.user().getAuthType())
-                            ? "redirect:/admin/userSettings.ktrl" : "redirect:/admin/menu.html";
+                            ? "redirect:/admin/userSettings.ktrl?defaultPassword=true" : "redirect:/admin/menu.html";
                 }
                 LoginThrottleUtil.recordSuccess(clientIP);
                 loginAuditLogger.info(auth.getUsername() + " (" + clientIP + ") - Authentication Success");

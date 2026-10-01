@@ -9,33 +9,32 @@
 <head>
 
     <meta th:replace="~{_res/inc/header}">
+    <script th:src="@{/_res/js/confirm-action.js}"></script>
 
     <script th:inline="javascript">
         /*<![CDATA[*/
         $(document).ready(function () {
 
-            $("#view_btn").button().click(function () {
-                $("#viewKeys").submit();
-            });
-
-            //call delete action
-            $(".disable_btn").button().click(function () {
+            //call disable action
+            $(".disable_btn").click(function () {
                 var id = $(this).attr('id').replace("disable_btn_", "");
-                window.location = 'disablePublicKey.ktrl?publicKey.id=' + id +  '&sortedSet.orderByDirection=' + /*[[${sortedSet.orderByDirection}]]*/ ''
-                    + '&sortedSet.orderByField=' + /*[[${sortedSet.orderByField}]]*/ ''
-                    + '&_csrf=' + [[${session._csrf}]]
-                    [# th:if= "${sortedSet.filterMap.get(@io.bastillion.manage.db.PublicKeyDB@FILTER_BY_USER_ID) != null}"]
-                        + '&sortedSet.filterMap[' + [[${@io.bastillion.manage.db.PublicKeyDB@FILTER_BY_USER_ID}]] + ']=' + /*[[${sortedSet.filterMap.get(@io.bastillion.manage.db.PublicKeyDB@FILTER_BY_USER_ID)}]]*/ ''
-                    [/]
-                    [# th:if= "${sortedSet.filterMap.get(@io.bastillion.manage.db.PublicKeyDB@FILTER_BY_PROFILE_ID) != null}"]
-                        + '&sortedSet.filterMap[' + [[${@io.bastillion.manage.db.PublicKeyDB@FILTER_BY_PROFILE_ID}]] + ']=' + /*[[${sortedSet.filterMap.get(@io.bastillion.manage.db.PublicKeyDB@FILTER_BY_PROFILE_ID)}]]*/ ''
-                    [/]
-                    [# th:if= "${sortedSet.filterMap.get(@io.bastillion.manage.db.PublicKeyDB@FILTER_BY_ENABLED) != null}"]
-                        + '&sortedSet.filterMap[' + [[${@io.bastillion.manage.db.PublicKeyDB@FILTER_BY_ENABLED}]] + ']=' + /*[[${sortedSet.filterMap.get(@io.bastillion.manage.db.PublicKeyDB@FILTER_BY_ENABLED)}]]*/ '';
-                    [/]
+                confirmAction(this, function () {
+                    window.location = 'disablePublicKey.ktrl?publicKey.id=' + id +  '&sortedSet.orderByDirection=' + /*[[${sortedSet.orderByDirection}]]*/ ''
+                        + '&sortedSet.orderByField=' + /*[[${sortedSet.orderByField}]]*/ ''
+                        + '&_csrf=' + [[${session._csrf}]]
+                        [# th:if= "${sortedSet.filterMap.get(@io.bastillion.manage.db.PublicKeyDB@FILTER_BY_USER_ID) != null}"]
+                            + '&sortedSet.filterMap[' + [[${@io.bastillion.manage.db.PublicKeyDB@FILTER_BY_USER_ID}]] + ']=' + /*[[${sortedSet.filterMap.get(@io.bastillion.manage.db.PublicKeyDB@FILTER_BY_USER_ID)}]]*/ ''
+                        [/]
+                        [# th:if= "${sortedSet.filterMap.get(@io.bastillion.manage.db.PublicKeyDB@FILTER_BY_PROFILE_ID) != null}"]
+                            + '&sortedSet.filterMap[' + [[${@io.bastillion.manage.db.PublicKeyDB@FILTER_BY_PROFILE_ID}]] + ']=' + /*[[${sortedSet.filterMap.get(@io.bastillion.manage.db.PublicKeyDB@FILTER_BY_PROFILE_ID)}]]*/ ''
+                        [/]
+                        [# th:if= "${sortedSet.filterMap.get(@io.bastillion.manage.db.PublicKeyDB@FILTER_BY_ENABLED) != null}"]
+                            + '&sortedSet.filterMap[' + [[${@io.bastillion.manage.db.PublicKeyDB@FILTER_BY_ENABLED}]] + ']=' + /*[[${sortedSet.filterMap.get(@io.bastillion.manage.db.PublicKeyDB@FILTER_BY_ENABLED)}]]*/ '';
+                        [/]
+                });
             });
 
-            $(".enable_btn").button().click(function () {
+            $(".enable_btn").click(function () {
                 var id = $(this).attr('id').replace("enable_btn_", "");
                 window.location = 'enablePublicKey.ktrl?publicKey.id=' + id +  '&sortedSet.orderByDirection=' + /*[[${sortedSet.orderByDirection}]]*/ ''
                     + '&sortedSet.orderByField=' + /*[[${sortedSet.orderByField}]]*/ ''
@@ -52,7 +51,7 @@
             });
 
 
-            $(".sort,.sortAsc,.sortDesc").click(function () {
+            $(".sort").click(function () {
                 var id = $(this).attr('id')
 
                 var orderDirection = $('#viewKeys_sortedSet_orderByDirection');
@@ -68,7 +67,8 @@
             });
 
             [# th:if= "${!#strings.isEmpty(sortedSet.orderByField)}"]
-                $('#' + [[${sortedSet.orderByField}]]).attr('class', [[${sortedSet.orderByDirection}]]);
+                $('#' + [[${sortedSet.orderByField}]]).attr('class', [[${sortedSet.orderByDirection}]])
+                    .attr('aria-sort', [[${sortedSet.orderByDirection}]] === 'asc' ? 'ascending' : 'descending');
             [/]
 
 
@@ -101,7 +101,7 @@
                                     th:href="'../admin/viewKeys.ktrl?_csrf=' + ${session._csrf}"
                                     class="btn btn-success">Manage My Keys</a>
                             </td>
-                            <td>|</td>
+                            <td class="filter-divider"></td>
                             <td th:if="${userList != null && !userList.empty}">
                                 <select th:name="'sortedSet.filterMap[' + ${@io.bastillion.manage.db.PublicKeyDB@FILTER_BY_USER_ID} + ']'"
                                         title="User" class="form-select view_frm_select">
@@ -113,7 +113,7 @@
                             </td>
                             <td th:if="${profileList != null && !profileList.empty}">
                                 <select th:name="'sortedSet.filterMap[' + ${@io.bastillion.manage.db.PublicKeyDB@FILTER_BY_PROFILE_ID} + ']'"
-                                        title="Key status" class="form-select view_frm_select">
+                                        title="Profile" class="form-select view_frm_select">
                                     <option value="">- Select Profile -</option>
                                     <option th:each="p : ${profileList}" th:value="${p.id}"
                                             th:text="${p.nm}"
@@ -122,7 +122,7 @@
                             </td>
                             <td>
                                 <select th:name="'sortedSet.filterMap[' + ${@io.bastillion.manage.db.PublicKeyDB@FILTER_BY_ENABLED} + ']'"
-                                        title="Profile" class="form-select view_frm_select">
+                                        title="Key status" class="form-select view_frm_select">
                                     <option value="true"
                                             th:selected="${#strings.equals(sortedSet.filterMap.get(@io.bastillion.manage.db.PublicKeyDB@FILTER_BY_ENABLED), 'true')}">
                                         Enabled
@@ -134,7 +134,7 @@
                                 </select>
                             </td>
                             <td>
-                                <div id="view_btn" class="btn btn-secondary">Filter</div>
+                                <button type="submit" id="view_btn" class="btn btn-secondary">Filter</button>
                             </td>
                         </tr>
                     </table>
@@ -147,6 +147,9 @@
             <thead>
             <tr>
                 <th th:id="${@io.bastillion.manage.db.PublicKeyDB@SORT_BY_KEY_NM}" class="sort">Key Name</th>
+                <th th:id="${@io.bastillion.manage.db.PublicKeyDB@SORT_BY_USERNAME}"
+                    class="sort">User
+                </th>
                 <th th:id="${@io.bastillion.manage.db.PublicKeyDB@SORT_BY_PROFILE}"
                     class="sort">Profile
                 </th>
@@ -159,13 +162,14 @@
                 <th th:id="${@io.bastillion.manage.db.PublicKeyDB@SORT_BY_CREATE_DT}"
                     class="sort">Created
                 </th>
-                <th>&#xA0;</th>
+                <th><span class="visually-hidden">Actions</span></th>
             </tr>
             </thead>
             <tbody>
             <template th:each="p : ${sortedSet.itemList}" th:remove="tag">
                 <tr>
                     <td th:text="${p.keyNm}"></td>
+                    <td th:text="${p.username}"></td>
                     <td>
                         <div th:if="${p.profile == null}">All Systems</div>
                         <div th:if="${p.profile != null}"><span th:text="${p.profile.nm}"></span>
@@ -176,15 +180,16 @@
                     <td th:text="${#dates.format(p.createDt, 'dd-MMM-yyyy')}"></td>
                     <td>
                         <div>
-                            <button class="btn btn-secondary btn-danger spacer spacer-left disable_btn"
-                                    data-bs-toggle="modal" th:if="${p.enabled}" th:id="'disable_btn_' + ${p.id}">
+                            <button class="btn btn-secondary btn-danger disable_btn"
+                                    th:if="${p.enabled}" th:id="'disable_btn_' + ${p.id}"
+                                    data-confirm-title="Disable SSH key" data-confirm-label="Disable"
+                                    th:attr="data-confirm='Disable ' + ${p.keyNm} + '? It is removed from every system and its fingerprint cannot be used again.'">
                                 Disable
                             </button>
-                            <button class="btn btn-secondary btn-success spacer spacer-left enable_btn"
+                            <button class="btn btn-secondary btn-success enable_btn"
                                     data-bs-toggle="modal" th:if="${!p.enabled}" th:id="'enable_btn_' + ${p.id}">
                                 Enable
                             </button>
-                            <div style="clear:both"></div>
                         </div>
                     </td>
                 </tr>
@@ -194,6 +199,7 @@
     </div>
     <p class="empty-state" th:if="${sortedSet.itemList == null || sortedSet.itemList.empty}"><strong>No SSH keys to show</strong><span>Add a public key to manage SSH access, or adjust the user and status filters.</span></p>
 </div>
+<div th:replace="~{_res/inc/confirm}"></div>
 </body>
 
 </html>

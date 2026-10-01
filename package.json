@@ -6,7 +6,8 @@
     "url": "git+https://github.com/Loophole-LLC/Bastillion.git"
   },
   "scripts": {
-    "build-assets": "node scripts/build-assets.mjs"
+    "build-assets": "node scripts/build-assets.mjs",
+    "test": "node --test \"scripts/tests/*.test.cjs\""
   },
   "dependencies": {
     "@xterm/addon-fit": "0.11.0",

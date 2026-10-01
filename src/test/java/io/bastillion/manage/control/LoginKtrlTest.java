@@ -244,7 +244,7 @@ class LoginKtrlTest {
 
             String view = ktrl.loginSubmit();
 
-            assertEquals("redirect:/admin/userSettings.ktrl", view);
+            assertEquals("redirect:/admin/userSettings.ktrl?defaultPassword=true", view);
         }
     }
 

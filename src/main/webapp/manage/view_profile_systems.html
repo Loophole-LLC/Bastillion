@@ -7,41 +7,7 @@
 <head>
     <meta th:replace="~{_res/inc/header}">
     <title>Bastillion - Assign Systems to Profile</title>
-    <script>
-        $(function () {
-            var form = $('#assignSystemsToProfile');
-            var choices = form.find('input[name="systemSelectId"]');
-            var selectAll = $('#assignment-select-all');
-            function updateSelection() {
-                var selected = choices.filter(':checked').length;
-                selectAll.prop('checked', choices.length > 0 && selected === choices.length)
-                    .prop('indeterminate', selected > 0 && selected < choices.length);
-                $('#assignment-count').text(selected + ' of ' + choices.length + ' systems selected');
-            }
-            selectAll.on('change', function () {
-                choices.prop('checked', this.checked);
-                updateSelection();
-            });
-            choices.on('change', updateSelection);
-            // Sort in place so pending checkbox changes survive reordering.
-            $('.assignment-sort').on('click', function () {
-                var button = $(this);
-                var header = button.closest('th');
-                var descending = header.attr('aria-sort') === 'ascending';
-                var column = Number(button.attr('data-column'));
-                var rows = form.find('tbody tr').get();
-                rows.sort(function (a, b) {
-                    var result = a.cells[column].textContent.trim().localeCompare(
-                        b.cells[column].textContent.trim(), undefined, {numeric: true, sensitivity: 'base'});
-                    return descending ? -result : result;
-                });
-                form.find('th[aria-sort]').attr('aria-sort', 'none');
-                header.attr('aria-sort', descending ? 'descending' : 'ascending');
-                form.find('tbody').append(rows);
-            });
-            updateSelection();
-        });
-    </script>
+    <script th:src="@{/_res/js/assignment-table.js}"></script>
 </head>
 <body>
 <div th:replace="~{_res/inc/navigation}"></div>
@@ -58,7 +24,7 @@
                 <p th:if="${!#strings.isEmpty(profile.desc)}" th:text="${profile.desc}"></p>
             </div>
         </div>
-        <form id="assignSystemsToProfile" th:action="@{/manage/assignSystemsToProfile.ktrl}" method="post"
+        <form id="assignSystemsToProfile" class="assignment-form" data-item-label="system" th:action="@{/manage/assignSystemsToProfile.ktrl}" method="post"
               th:if="${sortedSet.itemList != null && !sortedSet.itemList.empty}">
             <input type="hidden" name="_csrf" th:value="${session._csrf}">
             <input type="hidden" name="profile.id" th:value="${profile.id}">
@@ -72,9 +38,9 @@
                     <thead>
                     <tr>
                         <th scope="col"><input type="checkbox" id="assignment-select-all" class="form-check-input" aria-label="Select all systems"></th>
-                        <th scope="col" aria-sort="none"><button class="assignment-sort" type="button" data-column="1">System name <span aria-hidden="true">↕</span></button></th>
-                        <th scope="col" aria-sort="none"><button class="assignment-sort" type="button" data-column="2">SSH user <span aria-hidden="true">↕</span></button></th>
-                        <th scope="col" aria-sort="none"><button class="assignment-sort" type="button" data-column="3">Host / port <span aria-hidden="true">↕</span></button></th>
+                        <th scope="col" aria-sort="none"><button class="assignment-sort" type="button">System name <span class="assignment-sort-icon" aria-hidden="true"></span></button></th>
+                        <th scope="col" aria-sort="none"><button class="assignment-sort" type="button">SSH user <span class="assignment-sort-icon" aria-hidden="true"></span></button></th>
+                        <th scope="col" aria-sort="none"><button class="assignment-sort" type="button">Host / port <span class="assignment-sort-icon" aria-hidden="true"></span></button></th>
                     </tr>
                     </thead>
                     <tbody>
