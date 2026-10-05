@@ -184,30 +184,23 @@ public class EncryptionUtil {
             return new String(c.doFinal(ct), StandardCharsets.UTF_8);
         }
 
-        // Legacy fallback #1: old default "AES" (i.e., AES/ECB/PKCS5Padding)
-        try {
-            // codeql[java/weak-cryptographic-algorithm]: decrypt-only fallback for ciphertext
-            // written before the CBC->GCM migration (1501b09); encrypt() above only ever
-            // writes v2 GCM. Values only get upgraded to v2 when rewritten (e.g. a password
-            // change), so removing this would break decrypting already-stored dbPassword/
-            // private_key/passphrase/otp_secret values on any deployment that upgraded but
-            // hasn't rewritten them since.
-            Cipher c = Cipher.getInstance(T_ECB);
-            c.init(Cipher.DECRYPT_MODE, new SecretKeySpec(rawKey, CRYPT_ALGORITHM));
-            byte[] decodedVal = Base64.decodeBase64(serialized.getBytes(StandardCharsets.UTF_8));
-            return new String(c.doFinal(decodedVal), StandardCharsets.UTF_8);
-        } catch (GeneralSecurityException legacy1) {
-            // fall through to next
-        }
-
-        // Legacy fallback #2 (rare): if someone stored CBC without the v2 prefix
-        try {
-            // Not enough info to recover IV unless it was concatenated externally,
-            // so we only attempt ECB fallback above. CBC without metadata is unrecoverable.
-            throw new GeneralSecurityException("Unsupported legacy format without metadata");
-        } catch (GeneralSecurityException legacy2) {
-            throw legacy2;
-        }
+        // Legacy fallback: old default "AES" (i.e., AES/ECB/PKCS5Padding)
+        //
+        // codeql[java/weak-cryptographic-algorithm]: decrypt-only fallback for ciphertext
+        // written before the CBC->GCM migration (1501b09); encrypt() above only ever
+        // writes v2 GCM. Values only get upgraded to v2 when rewritten (e.g. a password
+        // change), so removing this would break decrypting already-stored dbPassword/
+        // private_key/passphrase/otp_secret values on any deployment that upgraded but
+        // hasn't rewritten them since.
+        //
+        // There is no further fallback to try. A pre-v2 CBC ciphertext carries no IV and no
+        // metadata to recover one from, so it is unrecoverable by construction - this used to
+        // be written out as a second "fallback" block whose entire body threw an exception
+        // and caught its own throw to rethrow it unchanged.
+        Cipher c = Cipher.getInstance(T_ECB);
+        c.init(Cipher.DECRYPT_MODE, new SecretKeySpec(rawKey, CRYPT_ALGORITHM));
+        byte[] decodedVal = Base64.decodeBase64(serialized.getBytes(StandardCharsets.UTF_8));
+        return new String(c.doFinal(decodedVal), StandardCharsets.UTF_8);
     }
 
     public static String encrypt(String str) throws GeneralSecurityException {

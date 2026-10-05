@@ -5,6 +5,7 @@
  */
 package io.bastillion.common.saml;
 
+import io.bastillion.common.util.AuditLogUtil;
 import io.bastillion.common.util.AuthSessionUtil;
 import io.bastillion.manage.util.SamlAuthUtil;
 import org.apache.commons.lang3.StringUtils;
@@ -82,7 +83,7 @@ public class SamlAcsServlet extends HttpServlet {
                     case EXPIRED -> redirectTo = "/login.ktrl?ssoError=expired";
                     default -> redirectTo = "/login.ktrl?ssoError=invalid";
                 }
-                loginAuditLogger.info("SAML - " + result.user().getUsername() + " - " + result.status());
+                loginAuditLogger.info("SAML - {} - {}", AuditLogUtil.safe(result.user().getUsername()), result.status());
             } else {
                 loginAuditLogger.info("SAML - Authentication Failed : Invalid assertion");
             }

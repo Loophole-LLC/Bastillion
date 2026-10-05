@@ -27,6 +27,7 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -44,6 +45,13 @@ public class SessionAuditDB {
     public static final String SORT_BY_IP_ADDRESS = "ip_address";
     public static final String SORT_BY_USERNAME = "username";
     public static final String SORT_BY_SESSION_TM = "session_tm";
+    /**
+     * Columns the session audit list may be ordered by - see
+     * {@link SortedSet#toOrderByClause(Set)}. Mirrors the sortable headers in
+     * manage/view_sessions.html.
+     */
+    private static final Set<String> SORTABLE_FIELDS = Set.of(
+            SORT_BY_FIRST_NM, SORT_BY_LAST_NM, SORT_BY_IP_ADDRESS, SORT_BY_USERNAME, SORT_BY_SESSION_TM);
 
     private static final Pattern TERMINAL_CONTROL_PATTERN = Pattern.compile(
             "\u001B\\[[0-9;?]*[ -/]*[@-~]"                       //CSI - colors, cursor movement, screen modes
@@ -94,7 +102,7 @@ public class SessionAuditDB {
     public static SortedSet getSessions(SortedSet sortedSet) throws SQLException, GeneralSecurityException {
         List<SessionAudit> outputList = new LinkedList<>();
 
-        String orderBy = sortedSet.toOrderByClause();
+        String orderBy = sortedSet.toOrderByClause(SORTABLE_FIELDS);
 
         String sql = "select * from session_log where 1=1 ";
         sql += StringUtils.isNotEmpty(sortedSet.getFilterMap().get(FILTER_BY_USER)) ? " and session_log.username like ? " : "";

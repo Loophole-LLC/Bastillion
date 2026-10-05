@@ -66,7 +66,7 @@ public class ProfileKtrl extends BaseKontroller {
             log.error(ex.toString(), ex);
             throw new ServletException(ex.toString(), ex);
         }
-        return "redirect:/manage/viewProfiles.ktrl?sortedSet.orderByDirection=" + sortedSet.getOrderByDirection() + "&sortedSet.orderByField=" + sortedSet.getOrderByField();
+        return "redirect:/manage/viewProfiles.ktrl?" + sortedSet.toQueryString();
     }
 
 
@@ -81,7 +81,7 @@ public class ProfileKtrl extends BaseKontroller {
                 throw new ServletException(ex.toString(), ex);
             }
         }
-        return "redirect:/manage/viewProfiles.ktrl?sortedSet.orderByDirection=" + sortedSet.getOrderByDirection() + "&sortedSet.orderByField=" + sortedSet.getOrderByField();
+        return "redirect:/manage/viewProfiles.ktrl?" + sortedSet.toQueryString();
     }
 
     /**

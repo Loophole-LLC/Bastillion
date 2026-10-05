@@ -20,6 +20,7 @@ import java.sql.Types;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Set;
 import java.util.Map;
 
 /**
@@ -42,6 +43,14 @@ public class PublicKeyDB {
     public static final String CREATE_DT = "create_dt";
     public static final String SORT_BY_CREATE_DT = CREATE_DT;
     public static final String SORT_BY_USERNAME = "username";
+    /**
+     * Columns the public key lists may be ordered by - see
+     * {@link SortedSet#toOrderByClause(Set)}. Mirrors the sortable headers in
+     * admin/view_keys.html and manage/view_keys.html.
+     */
+    private static final Set<String> SORTABLE_FIELDS = Set.of(
+            SORT_BY_KEY_NM, SORT_BY_PROFILE, SORT_BY_TYPE, SORT_BY_FINGERPRINT,
+            SORT_BY_CREATE_DT, SORT_BY_USERNAME);
 
     private PublicKeyDB() {
     }
@@ -138,7 +147,7 @@ public class PublicKeyDB {
 
         ArrayList<PublicKey> publicKeysList = new ArrayList<>();
 
-        String orderBy = sortedSet.toOrderByClause();
+        String orderBy = sortedSet.toOrderByClause(SORTABLE_FIELDS);
         String sql = "select p.*, u.username from public_keys p, users u where u.id=p.user_id  ";
 
         sql += StringUtils.isNotEmpty(sortedSet.getFilterMap().get(FILTER_BY_USER_ID)) ? " and p.user_id=? " : "";
@@ -195,7 +204,7 @@ public class PublicKeyDB {
         ArrayList<PublicKey> publicKeysList = new ArrayList<>();
 
 
-        String orderBy = sortedSet.toOrderByClause();
+        String orderBy = sortedSet.toOrderByClause(SORTABLE_FIELDS);
         String sql = "select * from public_keys where user_id = ? and enabled=true" + orderBy;
 
         try (Connection con = DBUtils.getConn();

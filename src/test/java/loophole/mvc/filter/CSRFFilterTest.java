@@ -74,7 +74,7 @@ class CSRFFilterTest {
     }
 
     @Test
-    void mismatchedTokenInvalidatesSessionAndRedirectsWithoutContinuingChain() throws Exception {
+    void mismatchedTokenRedirectsWithoutContinuingChain() throws Exception {
         when(request.getSession()).thenReturn(session);
         when(session.getAttribute(SecurityFilter._CSRF)).thenReturn("TOKEN123");
         when(request.getParameter(SecurityFilter._CSRF)).thenReturn("WRONG");
@@ -82,8 +82,37 @@ class CSRFFilterTest {
 
         filter.doFilter(request, response, filterChain);
 
-        verify(session).invalidate();
-        verify(response).sendRedirect("/app");
+        verify(response).sendRedirect("/app/");
+        verify(filterChain, never()).doFilter(any(), any());
+    }
+
+    @Test
+    void mismatchedTokenDoesNotInvalidateTheSession() throws Exception {
+        when(request.getSession()).thenReturn(session);
+        when(session.getAttribute(SecurityFilter._CSRF)).thenReturn("TOKEN123");
+        when(request.getParameter(SecurityFilter._CSRF)).thenReturn("WRONG");
+        when(request.getContextPath()).thenReturn("/app");
+
+        filter.doFilter(request, response, filterChain);
+
+        verify(session, never()).invalidate();
+    }
+
+    @Test
+    void requestWithNoTokenParameterAtAllDoesNotInvalidateTheSession() throws Exception {
+        // The shape that made this a one-tag logout for any third-party page: the filter also
+        // covers plain page GETs (*.html), and an absent _csrf parameter fails the comparison
+        // exactly like a wrong one. <img src="https://host/admin/menu.html"> on an unrelated
+        // site therefore used to destroy the session of every signed-in user who loaded it,
+        // with no token knowledge needed. The request must still be refused.
+        when(request.getSession()).thenReturn(session);
+        when(session.getAttribute(SecurityFilter._CSRF)).thenReturn("TOKEN123");
+        when(request.getParameter(SecurityFilter._CSRF)).thenReturn(null);
+        when(request.getContextPath()).thenReturn("/app");
+
+        filter.doFilter(request, response, filterChain);
+
+        verify(session, never()).invalidate();
         verify(filterChain, never()).doFilter(any(), any());
     }
 }

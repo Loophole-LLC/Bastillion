@@ -56,9 +56,17 @@ public class CSRFFilter implements Filter {
             return;
         }
         log.debug("CSRF token is invalid for " + httpServletRequest.getRequestURL());
-        httpServletRequest.getSession().invalidate();
-        log.debug("Session invalidated");
-        httpServletResponse.sendRedirect(httpServletRequest.getContextPath());
+        // Refuse the request, but deliberately do NOT invalidate the session.
+        //
+        // A missing _csrf parameter fails this check exactly like a wrong one, and the filter
+        // covers plain page GETs as well as posts, so invalidating here handed any third-party
+        // page a one-tag logout for every signed-in user: <img src="https://host/admin/menu.html">
+        // destroyed the victim's session with no token knowledge and nothing to forge. The
+        // token still has to match for the request to be processed - the request is rejected,
+        // the user's session simply survives being targeted. It also means an ordinary stale
+        // token (bookmark, back button, a second tab that rotated it) costs a redirect home
+        // instead of signing the user out.
+        httpServletResponse.sendRedirect(httpServletRequest.getContextPath() + "/");
     }
 
     public void destroy() {

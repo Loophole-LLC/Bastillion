@@ -27,6 +27,11 @@
         <Logger name="io.bastillion.manage.control.LoginAudit" level="info" additivity="false">
             <AppenderRef ref="console"/>
         </Logger>
+        <!-- Host key decisions (io.bastillion.manage.util.HostKeyVerifier) log here: which
+             host keys were trusted on first sight, and which connections were refused. -->
+        <Logger name="io.bastillion.manage.util.SystemAudit" level="info" additivity="false">
+            <AppenderRef ref="console"/>
+        </Logger>
         <Root level="warn">
             <AppenderRef ref="console"/>
         </Root>

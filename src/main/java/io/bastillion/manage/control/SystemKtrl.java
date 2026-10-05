@@ -90,7 +90,7 @@ public class SystemKtrl extends BaseKontroller {
 
     @Kontrol(path = "/manage/saveSystem", method = MethodType.POST)
     public String saveSystem() throws ServletException {
-        String retVal = "redirect:/manage/viewSystems.ktrl?sortedSet.orderByDirection=" + sortedSet.getOrderByDirection() + "&sortedSet.orderByField=" + sortedSet.getOrderByField();
+        String retVal = "redirect:/manage/viewSystems.ktrl?" + sortedSet.toQueryString();
 
         boolean isNewSystem = hostSystem.getId() == null;
 
@@ -140,7 +140,7 @@ public class SystemKtrl extends BaseKontroller {
             }
 
         }
-        return "redirect:/manage/viewSystems.ktrl?sortedSet.orderByDirection=" + sortedSet.getOrderByDirection() + "&sortedSet.orderByField=" + sortedSet.getOrderByField();
+        return "redirect:/manage/viewSystems.ktrl?" + sortedSet.toQueryString();
     }
 
     /**

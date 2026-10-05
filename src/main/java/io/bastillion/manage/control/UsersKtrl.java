@@ -64,7 +64,7 @@ public class UsersKtrl extends BaseKontroller {
 
     @Kontrol(path = "/manage/saveUser", method = MethodType.POST)
     public String saveUser() throws ServletException {
-        String retVal = "redirect:/manage/viewUsers.ktrl?sortedSet.orderByDirection=" + sortedSet.getOrderByDirection() + "&sortedSet.orderByField=" + sortedSet.getOrderByField();
+        String retVal = "redirect:/manage/viewUsers.ktrl?" + sortedSet.toQueryString();
 
         try {
             if (user.getId() != null) {
@@ -101,7 +101,7 @@ public class UsersKtrl extends BaseKontroller {
             log.error(ex.toString(), ex);
             throw new ServletException(ex.toString(), ex);
         }
-        return "redirect:/manage/viewUsers.ktrl?sortedSet.orderByDirection=" + sortedSet.getOrderByDirection() + "&sortedSet.orderByField=" + sortedSet.getOrderByField();
+        return "redirect:/manage/viewUsers.ktrl?" + sortedSet.toQueryString();
     }
 
     @Kontrol(path = "/manage/unlockUser", method = MethodType.GET)
@@ -115,7 +115,7 @@ public class UsersKtrl extends BaseKontroller {
             log.error(ex.toString(), ex);
             throw new ServletException(ex.toString(), ex);
         }
-        return "redirect:/manage/viewUsers.ktrl?sortedSet.orderByDirection=" + sortedSet.getOrderByDirection() + "&sortedSet.orderByField=" + sortedSet.getOrderByField();
+        return "redirect:/manage/viewUsers.ktrl?" + sortedSet.toQueryString();
     }
 
     /**

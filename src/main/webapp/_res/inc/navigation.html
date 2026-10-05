@@ -32,6 +32,9 @@
                             </li>
                             <li><a class="dropdown-item" th:href="'../manage/viewUsers.ktrl?_csrf=' + ${session._csrf}">Users</a>
                             </li>
+                            <li><a class="dropdown-item"
+                                   th:href="'../manage/viewHostKeys.ktrl?_csrf=' + ${session._csrf}">Host Keys</a>
+                            </li>
                         </template>
                         <template th:if="${@io.bastillion.manage.util.SSHUtil@keyManagementEnabled}"
                                   th:remove="tag">

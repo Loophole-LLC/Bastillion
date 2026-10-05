@@ -6,7 +6,6 @@
 package io.bastillion.common.filter;
 
 import io.bastillion.common.util.AuthUtil;
-import io.bastillion.manage.db.AuthDB;
 import io.bastillion.manage.model.Auth;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,8 +22,6 @@ import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.sql.SQLException;
 import java.text.ParseException;
-import java.text.SimpleDateFormat;
-import java.util.Date;
 
 /**
  * Filter determines if admin user is authenticated
@@ -56,41 +53,21 @@ public class AuthFilter implements Filter {
         boolean isAdmin = false;
 
         try {
-            //read auth token
-            String authToken = AuthUtil.getAuthToken(servletRequest.getSession());
+            //valid, non-expired auth token for a known user, or null
+            String userType = AuthUtil.authenticatedUserType(servletRequest.getSession());
 
-            //check if exists
-            if (authToken != null && !authToken.trim().equals("")) {
-                //check if valid admin auth token
-                String userType = AuthDB.isAuthorized(AuthUtil.getUserId(servletRequest.getSession()), authToken);
-                if (userType != null) {
-                    // Normalized servlet path, not the raw request URI - see BaseKontroller.execute()
-                    // for why raw getRequestURI() + contains() is unsafe for path-based auth decisions.
-                    String uri = servletRequest.getServletPath();
-                    if (Auth.MANAGER.equals(userType)) {
-                        isAdmin = true;
-                    } else if (!uri.contains("/manage/") && Auth.ADMINISTRATOR.equals(userType)) {
-                        isAdmin = true;
-                    }
-                    AuthUtil.setUserType(servletRequest.getSession(), userType);
-
-                    //check to see if user has timed out
-                    String timeStr = AuthUtil.getTimeout(servletRequest.getSession());
-                    if (timeStr != null && !timeStr.trim().equals("")) {
-                        SimpleDateFormat sdf = new SimpleDateFormat("MMddyyyyHHmmss");
-                        Date sessionTimeout = sdf.parse(timeStr);
-                        Date currentTime = new Date();
-
-                        //if current time > timeout then redirect to login page
-                        if (sessionTimeout == null || currentTime.after(sessionTimeout)) {
-                            isAdmin = false;
-                        } else {
-                            AuthUtil.setTimeout(servletRequest.getSession());
-                        }
-                    } else {
-                        isAdmin = false;
-                    }
+            if (userType != null) {
+                // Normalized servlet path, not the raw request URI - see BaseKontroller.execute()
+                // for why raw getRequestURI() + contains() is unsafe for path-based auth decisions.
+                String uri = servletRequest.getServletPath();
+                if (Auth.MANAGER.equals(userType)) {
+                    isAdmin = true;
+                } else if (!uri.contains("/manage/") && Auth.ADMINISTRATOR.equals(userType)) {
+                    isAdmin = true;
                 }
+                AuthUtil.setUserType(servletRequest.getSession(), userType);
+                //extend the window on activity
+                AuthUtil.setTimeout(servletRequest.getSession());
             }
 
             //if not admin redirect to login page

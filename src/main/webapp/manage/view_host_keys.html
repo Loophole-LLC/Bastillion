@@ -1,0 +1,170 @@
+<!--/**
+ *    Copyright (C) 2013 Loophole, LLC
+ *
+ *    Licensed under The Prosperity Public License 3.0.0
+ */-->
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" data-bs-theme="dark">
+
+<head>
+
+    <meta th:replace="~{_res/inc/header}"/>
+    <script th:src="@{/_res/js/confirm-action.js}"></script>
+
+    <script th:inline="javascript">
+        /*<![CDATA[*/
+        $(document).ready(function () {
+
+            //approve, revoke and forget all post through a per-row form
+            $(".host_key_action_btn").click(function () {
+                var form = $('#' + $(this).data('form'));
+                confirmAction(this, function () {
+                    form.submit();
+                });
+            });
+
+            $(".sort").click(function () {
+                var id = $(this).attr('id')
+
+                var orderDirection = $('#viewHostKeys_sortedSet_orderByDirection');
+                if (orderDirection.val() === 'asc') {
+                    orderDirection.val('desc');
+                } else {
+                    orderDirection.val('asc');
+                }
+                $('#viewHostKeys_sortedSet_orderByField').val(id);
+                $("#viewHostKeys").submit();
+
+            });
+            [# th:if= "${!#strings.isEmpty(sortedSet.orderByField)}"]
+                $('#' + [[${sortedSet.orderByField}]]).attr('class', [[${sortedSet.orderByDirection}]])
+                    .attr('aria-sort', [[${sortedSet.orderByDirection}]] === 'asc' ? 'ascending' : 'descending');
+            [/]
+
+        });
+        /*]]>*/
+
+    </script>
+
+    <title>Bastillion - Manage Host Keys</title>
+</head>
+
+<body>
+<div th:replace="~{_res/inc/navigation}"></div>
+<div class="container table-page">
+    <form id="viewHostKeys" th:action="@{/manage/viewHostKeys.ktrl}" method="get">
+        <input type="hidden" name="_csrf" th:value="${session._csrf}">
+        <input type="hidden" id="viewHostKeys_sortedSet_orderByDirection" name="sortedSet.orderByDirection"
+               th:value="${sortedSet.orderByDirection}">
+        <input type="hidden" id="viewHostKeys_sortedSet_orderByField" name="sortedSet.orderByField"
+               th:value="${sortedSet.orderByField}">
+    </form>
+    <h3>Manage Host Keys</h3>
+    <p>The SSH host key each system presented, and whether Bastillion will connect to it.
+        A host whose key changes is refused until you decide the change was expected.</p>
+
+    <div class="alert alert-danger" th:unless="${hostKeyVerificationEnabled}">
+        Host key verification is switched off (<code>hostKeyVerification=off</code>). Keys below
+        are not being checked, and Bastillion will connect to a managed system's address whatever
+        key it presents.
+    </div>
+
+    <div class="scrollWrapper" th:if="${sortedSet.itemList != null && !sortedSet.itemList.empty}">
+        <table class="table-striped scrollableTable">
+            <thead>
+            <tr>
+                <th th:id="${@io.bastillion.manage.db.HostKeyDB@SORT_BY_HOST}" class="sort">Host</th>
+                <th th:id="${@io.bastillion.manage.db.HostKeyDB@SORT_BY_TYPE}" class="sort">Type</th>
+                <th>Fingerprint</th>
+                <th th:id="${@io.bastillion.manage.db.HostKeyDB@SORT_BY_STATUS}" class="sort">State</th>
+                <th th:id="${@io.bastillion.manage.db.HostKeyDB@SORT_BY_FIRST_SEEN_TM}" class="sort">First Seen</th>
+                <th>Approved By</th>
+                <th><span class="visually-hidden">Actions</span></th>
+            </tr>
+            </thead>
+            <tbody>
+            <template th:each="k : ${sortedSet.itemList}" th:remove="tag">
+                <tr>
+                    <td th:text="${k.host} + ':' + ${k.port}"></td>
+                    <td th:text="${k.type}"></td>
+                    <td>
+                        <code th:text="${k.fingerprint}"></code>
+                        <div th:if="${k.offeredFingerprint != null}">
+                            <strong>offered:</strong> <code th:text="${k.offeredFingerprint}"></code>
+                        </div>
+                    </td>
+                    <td>
+                        <span th:if="${#strings.equals(k.status, 'TRUSTED')}">trusted</span>
+                        <strong th:if="${#strings.equals(k.status, 'PENDING')}">new &ndash; needs approval</strong>
+                        <strong th:if="${#strings.equals(k.status, 'CHANGED')}">changed &ndash; blocked</strong>
+                        <strong th:if="${#strings.equals(k.status, 'REVOKED')}">revoked &ndash; blocked</strong>
+                    </td>
+                    <td th:text="${#dates.format(k.firstSeenTm, 'yyyy-MM-dd HH:mm')}"></td>
+                    <td th:text="${k.approvedBy} ?: '-'"></td>
+                    <td>
+                        <div>
+                            <form th:id="'approve_frm_' + ${k.id}" th:action="@{/manage/approveHostKey.ktrl}"
+                                  method="post" th:if="${k.blocking}">
+                                <input type="hidden" name="_csrf" th:value="${session._csrf}">
+                                <input type="hidden" name="hostKey.id" th:value="${k.id}">
+                                <input type="hidden" name="sortedSet.orderByDirection"
+                                       th:value="${sortedSet.orderByDirection}">
+                                <input type="hidden" name="sortedSet.orderByField"
+                                       th:value="${sortedSet.orderByField}">
+                            </form>
+                            <button th:if="${k.blocking}"
+                                    data-confirm-title="Trust host key"
+                                    data-confirm-label="Trust"
+                                    th:attr="data-form='approve_frm_' + ${k.id},
+                                             data-confirm='Trust the ' + ${k.type} + ' key ' + (${k.offeredFingerprint} ?: ${k.fingerprint}) + ' for ' + ${k.host} + '? Only do this if you can confirm that fingerprint with the host itself - approving an intercepted key hands it the application SSH key.'"
+                                    class="btn btn-secondary edit_btn host_key_action_btn">Trust
+                            </button>
+
+                            <form th:id="'revoke_frm_' + ${k.id}" th:action="@{/manage/revokeHostKey.ktrl}"
+                                  method="post" th:unless="${#strings.equals(k.status, 'REVOKED')}">
+                                <input type="hidden" name="_csrf" th:value="${session._csrf}">
+                                <input type="hidden" name="hostKey.id" th:value="${k.id}">
+                                <input type="hidden" name="sortedSet.orderByDirection"
+                                       th:value="${sortedSet.orderByDirection}">
+                                <input type="hidden" name="sortedSet.orderByField"
+                                       th:value="${sortedSet.orderByField}">
+                            </form>
+                            <button th:unless="${#strings.equals(k.status, 'REVOKED')}"
+                                    data-confirm-title="Revoke host key"
+                                    data-confirm-label="Revoke"
+                                    th:attr="data-form='revoke_frm_' + ${k.id},
+                                             data-confirm='Revoke the ' + ${k.type} + ' key for ' + ${k.host} + '? Bastillion will refuse to connect to that host until the key is trusted again.'"
+                                    class="btn btn-secondary host_key_action_btn">Revoke
+                            </button>
+
+                            <form th:id="'delete_frm_' + ${k.id}" th:action="@{/manage/deleteHostKey.ktrl}"
+                                  method="post">
+                                <input type="hidden" name="_csrf" th:value="${session._csrf}">
+                                <input type="hidden" name="hostKey.id" th:value="${k.id}">
+                                <input type="hidden" name="sortedSet.orderByDirection"
+                                       th:value="${sortedSet.orderByDirection}">
+                                <input type="hidden" name="sortedSet.orderByField"
+                                       th:value="${sortedSet.orderByField}">
+                            </form>
+                            <button data-confirm-title="Forget host key"
+                                    data-confirm-label="Forget"
+                                    th:attr="data-form='delete_frm_' + ${k.id},
+                                             data-confirm='Forget the ' + ${k.type} + ' key for ' + ${k.host} + '? The next connection treats that host as never seen before, so whatever key it presents then is the one that gets recorded.'"
+                                    class="btn btn-secondary del_btn host_key_action_btn">Forget
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            </template>
+            </tbody>
+        </table>
+    </div>
+    <p class="empty-state" th:if="${sortedSet.itemList == null || sortedSet.itemList.empty}">
+        <strong>No host keys recorded yet</strong>
+        <span>Bastillion records the SSH host key of each managed system the first time it connects to it.</span>
+    </p>
+</div>
+<div th:replace="~{_res/inc/confirm}"></div>
+</body>
+
+</html>

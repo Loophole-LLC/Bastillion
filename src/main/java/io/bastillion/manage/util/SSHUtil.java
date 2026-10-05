@@ -24,6 +24,7 @@ import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
 import java.sql.SQLException;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
 /**
@@ -55,17 +56,19 @@ public class SSHUtil {
 
     private SSHUtil() {}
 
-    // --- Command Injection Guards ---
+    // --- authorized_keys Content Guards ---
 
-    // authorizedKeys is interpolated unquoted into remote shell commands (cat/echo/chmod),
-    // so it's restricted to a plain relative/absolute file path with no shell metacharacters.
+    // addPubKey reads and writes authorized_keys over SFTP, so neither of these values is
+    // ever handed to a remote shell and neither guard is load-bearing against command
+    // injection any more (see addPubKey). They are kept as input validation: a plain
+    // relative/absolute path, and key lines that cannot corrupt the file they are written
+    // into. Rejecting shell metacharacters is now purely defense-in-depth, in case a value
+    // ever reaches an unquoted shell context again.
     private static final Pattern SAFE_AUTHORIZED_KEYS_PATH = Pattern.compile("[A-Za-z0-9_./-]+");
 
-    // each key line is interpolated inside a single-quoted echo '...' remote shell command,
-    // so a bare single quote (which would close the quoting early) makes the line unsafe.
-    // The other shell metacharacters have no special meaning inside single quotes in POSIX
-    // shells, but are rejected too as defense-in-depth in case a line ever reaches an
-    // unquoted context.
+    // A CR or LF inside a single key line would split it into two authorized_keys entries,
+    // letting a crafted key comment append an entry of its own (with its own options, e.g.
+    // command= or from=). The shell metacharacters are rejected as defense-in-depth.
     private static final Pattern UNSAFE_KEY_CHARS = Pattern.compile("['\"`$;|&\\r]");
 
     // package-private (rather than private) so SSHUtilTest can exercise the guards directly
@@ -213,22 +216,7 @@ public class SSHUtil {
                 return hostSystem;
             }
 
-            ChannelExec exec = (ChannelExec) session.openChannel("exec");
-            exec.setCommand("cat " + authorizedKeys);
-            exec.setErrStream(System.err);
-            exec.setInputStream(null);
-            InputStream in = exec.getInputStream();
-            exec.connect(CHANNEL_TIMEOUT);
-
-            BufferedReader reader = new BufferedReader(new InputStreamReader(in));
-            StringBuilder existingKeysBuilder = new StringBuilder();
-            String line;
-            while ((line = reader.readLine()) != null)
-                existingKeysBuilder.append(line).append("\n");
-            reader.close();
-            exec.disconnect();
-
-            String existingKeys = existingKeysBuilder.toString();
+            String existingKeys = readAuthorizedKeys(session, authorizedKeys);
             String appPubKey = appPublicKey.replace("\n", "").trim();
             if (!isSafeKeyContent(appPubKey)) {
                 log.error("Refusing to push keys for system {}: application public key contains disallowed characters",
@@ -252,21 +240,63 @@ public class SSHUtil {
                 sb.append(appPubKey);
                 newKeys = sb.toString();
             } else {
+                // Key management off: leave whatever is already on the host alone and just
+                // make sure Bastillion's own key is present. existingKeys is host-controlled
+                // content that is written straight back out, which is safe only because
+                // writeAuthorizedKeys uses SFTP rather than a shell command.
                 if (!existingKeys.contains(appPubKey))
                     newKeys = existingKeys + "\n" + appPubKey;
                 else newKeys = existingKeys;
             }
 
             if (!newKeys.equals(existingKeys)) {
-                ChannelExec upd = (ChannelExec) session.openChannel("exec");
-                upd.setCommand("echo '" + newKeys + "' > " + authorizedKeys + "; chmod 600 " + authorizedKeys);
-                upd.connect(CHANNEL_TIMEOUT);
-                upd.disconnect();
+                writeAuthorizedKeys(session, authorizedKeys, newKeys);
             }
         } catch (Exception ex) {
             log.error(ex.toString(), ex);
         }
         return hostSystem;
+    }
+
+    /**
+     * Reads the remote authorized_keys file over SFTP, returning "" if it does not exist yet.
+     * <p>
+     * Deliberately not {@code cat <path>} over an exec channel: the contents come back here
+     * and are written out again by {@link #writeAuthorizedKeys}, and routing them through a
+     * shell command line meant any quote already present in the file (an apostrophe in a key
+     * comment is perfectly legal) could terminate the quoting of the command that rewrote it.
+     * SFTP transfers the bytes with no shell on either end, so the file's existing contents
+     * need no escaping or validation at all.
+     */
+    private static String readAuthorizedKeys(Session session, String authorizedKeys) throws JSchException, SftpException, IOException {
+        ChannelSftp sftp = (ChannelSftp) session.openChannel("sftp");
+        try {
+            sftp.connect(CHANNEL_TIMEOUT);
+            try (InputStream in = sftp.get(authorizedKeys)) {
+                return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+            } catch (SftpException ex) {
+                if (ex.id == ChannelSftp.SSH_FX_NO_SUCH_FILE) {
+                    return "";
+                }
+                throw ex;
+            }
+        } finally {
+            sftp.disconnect();
+        }
+    }
+
+    /**
+     * Replaces the remote authorized_keys file over SFTP and sets it back to 0600.
+     */
+    private static void writeAuthorizedKeys(Session session, String authorizedKeys, String contents) throws JSchException, SftpException {
+        ChannelSftp sftp = (ChannelSftp) session.openChannel("sftp");
+        try {
+            sftp.connect(CHANNEL_TIMEOUT);
+            sftp.put(new ByteArrayInputStream(contents.getBytes(StandardCharsets.UTF_8)), authorizedKeys);
+            sftp.chmod(0600, authorizedKeys);
+        } finally {
+            sftp.disconnect();
+        }
     }
 
     public static HostSystem pushUpload(HostSystem hostSystem, Session session, String source, String destination) {
@@ -323,7 +353,7 @@ public class SSHUtil {
 
             Session session = jsch.getSession(hostSystem.getUser(), hostSystem.getHost(), hostSystem.getPort());
             if (StringUtils.isNotBlank(password)) session.setPassword(password.getBytes(StandardCharsets.UTF_8));
-            session.setConfig("StrictHostKeyChecking", "no");
+            applyHostKeyVerification(jsch, session);
             session.setConfig("PreferredAuthentications", "publickey,keyboard-interactive,password");
             session.setServerAliveInterval(SERVER_ALIVE_INTERVAL);
             session.connect(SESSION_TIMEOUT);
@@ -386,6 +416,27 @@ public class SSHUtil {
         }
     }
 
+    /**
+     * Points a session at Bastillion's own known_hosts ({@link HostKeyVerifier}) and turns on
+     * strict checking, so JSch aborts the handshake when verification refuses a key.
+     * <p>
+     * {@code StrictHostKeyChecking=no} - what both of these sessions used to set
+     * unconditionally - does not downgrade host key checking to a warning, it skips it: the
+     * key a managed system presents was never compared against anything. That is the one
+     * check standing between a bastion and handing the application private key, and on
+     * authentication fallback a user's password or key passphrase, to whatever happens to
+     * answer on that address.
+     */
+    private static void applyHostKeyVerification(JSch jsch, Session session) {
+        if (!HostKeyVerifier.isEnabled()) {
+            // Explicitly opted out via hostKeyVerification=off.
+            session.setConfig("StrictHostKeyChecking", "no");
+            return;
+        }
+        jsch.setHostKeyRepository(new HostKeyVerifier(jsch));
+        session.setConfig("StrictHostKeyChecking", "yes");
+    }
+
     // --- Authentication and Add Key ---
     public static HostSystem authAndAddPubKey(HostSystem hostSystem, String passphrase, String password) {
         JSch jsch = new JSch();
@@ -403,7 +454,7 @@ public class SSHUtil {
 
             session = jsch.getSession(hostSystem.getUser(), hostSystem.getHost(), hostSystem.getPort());
             if (password != null && !password.isEmpty()) session.setPassword(password.getBytes(StandardCharsets.UTF_8));
-            session.setConfig("StrictHostKeyChecking", "no");
+            applyHostKeyVerification(jsch, session);
             session.setConfig("PreferredAuthentications", "publickey,keyboard-interactive,password");
             session.setServerAliveInterval(SERVER_ALIVE_INTERVAL);
             session.connect(SESSION_TIMEOUT);
@@ -595,6 +646,26 @@ public class SSHUtil {
         return x509Encoded;
     }
 
+    /**
+     * ssh-keygen here is local and non-interactive and finishes in milliseconds. A process
+     * still alive after this has stopped to prompt for something, and will never be answered.
+     */
+    private static final long KEYGEN_TIMEOUT_SECONDS = 30;
+
+    private static final byte[] OPENSSH_KEY_MAGIC = "openssh-key-v1\0".getBytes(StandardCharsets.US_ASCII);
+    private static final String CIPHER_NONE = "none";
+
+    /**
+     * Re-encrypts a freshly generated OpenSSH private key under the user's passphrase, by
+     * handing it to ssh-keygen.
+     * <p>
+     * Every failure here has to be loud. This runs on the path that generates a key for a
+     * user to download ({@code AuthKeysKtrl.generateUserKey}), so the caller cannot tell a
+     * rewrapped key from the plaintext one it passed in by looking at it - and the user is
+     * told the result is protected by the passphrase they just chose. The previous version
+     * called {@code proc.waitFor()}, discarded the exit status and returned the file
+     * regardless, so any ssh-keygen failure returned the key still completely unencrypted.
+     */
     public static String rewrapWithOpenSSHKeygen(String userId, String pem, String passphrase)
             throws IOException, InterruptedException, GeneralSecurityException {
         Path tmp = Files.createTempFile("bastillion_key_" + userId + "_", ".key");
@@ -607,10 +678,85 @@ public class SSHUtil {
                     "-N", passphrase, "-f", tmp.toString(), "-o", "-a", "16");
             pb.redirectErrorStream(true);
             Process proc = pb.start();
-            proc.waitFor();
-            return Files.readString(tmp, StandardCharsets.US_ASCII);
+
+            // Close the child's stdin straight away. It is a pipe this end never writes to,
+            // so had ssh-keygen decided to prompt - a wrong -P, a format it would rather ask
+            // about - it would have blocked on a read that nothing was ever going to satisfy.
+            // At EOF it fails and exits instead, which is what makes draining its output
+            // below safe to do on this thread.
+            proc.getOutputStream().close();
+
+            // Read the merged output before waiting, not after. redirectErrorStream was
+            // already set but nothing ever read the pipe, so output large enough to fill the
+            // buffer would have left ssh-keygen blocked writing and waitFor() blocked on
+            // ssh-keygen.
+            String output;
+            try (InputStream out = proc.getInputStream()) {
+                output = new String(out.readAllBytes(), StandardCharsets.UTF_8).trim();
+            }
+
+            if (!proc.waitFor(KEYGEN_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                proc.destroyForcibly();
+                throw new GeneralSecurityException("ssh-keygen did not finish within "
+                        + KEYGEN_TIMEOUT_SECONDS + "s while applying a passphrase to the generated key");
+            }
+            if (proc.exitValue() != 0) {
+                throw new GeneralSecurityException("ssh-keygen failed (exit " + proc.exitValue()
+                        + ") while applying a passphrase to the generated key"
+                        + (output.isEmpty() ? "" : ": " + output));
+            }
+
+            String rewrapped = Files.readString(tmp, StandardCharsets.US_ASCII);
+            // Check the property the user is relying on, rather than trusting the exit status
+            // to imply it. This is the last point at which an unencrypted key can be stopped.
+            if (!isEncryptedOpenSSHPrivateKey(rewrapped)) {
+                throw new GeneralSecurityException(
+                        "ssh-keygen reported success but the generated private key is not encrypted");
+            }
+            return rewrapped;
         } finally {
             try { Files.deleteIfExists(tmp); } catch (IOException ignored) {}
         }
+    }
+
+    /**
+     * True if this is an OpenSSH private key whose contents are encrypted.
+     * <p>
+     * The openssh-key-v1 container names its cipher in the clear: the magic is followed by an
+     * SSH string holding the cipher name, which is literally "none" for an unencrypted key
+     * (see {@link #buildOpenSSHPrivateKey(java.security.KeyPair, int)}, which writes exactly
+     * that). Anything whose format cannot be read is reported as not encrypted - this backs a
+     * security check, so being unable to prove encryption counts as failing it.
+     */
+    static boolean isEncryptedOpenSSHPrivateKey(String pem) {
+        if (StringUtils.isBlank(pem)) {
+            return false;
+        }
+        String body = StringUtils.substringBetween(pem,
+                "-----BEGIN OPENSSH PRIVATE KEY-----", "-----END OPENSSH PRIVATE KEY-----");
+        if (body == null) {
+            return false;
+        }
+        byte[] decoded;
+        try {
+            decoded = Base64.getMimeDecoder().decode(body);
+        } catch (IllegalArgumentException ex) {
+            return false;
+        }
+        if (decoded.length < OPENSSH_KEY_MAGIC.length + 4) {
+            return false;
+        }
+        if (!Arrays.equals(Arrays.copyOf(decoded, OPENSSH_KEY_MAGIC.length), OPENSSH_KEY_MAGIC)) {
+            return false;
+        }
+        ByteBuffer buffer = ByteBuffer.wrap(decoded, OPENSSH_KEY_MAGIC.length,
+                decoded.length - OPENSSH_KEY_MAGIC.length);
+        int cipherLength = buffer.getInt();
+        if (cipherLength < 0 || cipherLength > buffer.remaining()) {
+            return false;
+        }
+        byte[] cipher = new byte[cipherLength];
+        buffer.get(cipher);
+        return !CIPHER_NONE.equals(new String(cipher, StandardCharsets.US_ASCII));
     }
 }

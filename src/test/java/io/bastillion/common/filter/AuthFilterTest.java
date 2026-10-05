@@ -132,7 +132,8 @@ class AuthFilterTest {
     void expiredSessionRedirectsDespiteAnOtherwiseValidToken() throws Exception {
         givenAuthenticatedSession("token123", 5L);
         when(session.getAttribute(AuthUtil.TIMEOUT)).thenReturn(timeoutString(-10));
-        when(request.getServletPath()).thenReturn("/dashboard");
+        // No getServletPath() stub: an expired session is rejected before the requested path
+        // is looked at, so which path it was never enters into it.
         when(request.getContextPath()).thenReturn("");
 
         try (MockedStatic<AuthDB> authDB = mockStatic(AuthDB.class)) {

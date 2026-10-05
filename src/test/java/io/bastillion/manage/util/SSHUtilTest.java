@@ -13,6 +13,7 @@ import io.bastillion.manage.model.UserSchSessions;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayOutputStream;
+import java.security.GeneralSecurityException;
 import java.security.KeyPairGenerator;
 import java.util.Base64;
 import java.util.HashSet;
@@ -29,6 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * Covers the pure key-encoding/validation logic behind Bastillion's two key-generation
@@ -81,6 +83,81 @@ class SSHUtilTest {
 
         assertDoesNotThrow(() -> SSHUtil.validateKeyPair(privatePem, publicKey, ""));
         assertEquals("ED25519", SSHUtil.getKeyType(publicKey));
+    }
+
+    // --- rewrapWithOpenSSHKeygen: the passphrase the user chose must actually be applied ---
+    // This runs where a user generates a key to download, and the result is presented as
+    // protected by their passphrase. A silent failure here used to return the key completely
+    // unencrypted, which is indistinguishable from success to every caller.
+
+    @Test
+    void isEncryptedOpenSSHPrivateKeyRejectsAFreshlyBuiltUnencryptedKey() throws Exception {
+        KeyPairGenerator kpg = KeyPairGenerator.getInstance("Ed25519");
+        java.security.KeyPair kp = kpg.generateKeyPair();
+
+        // buildOpenSSHPrivateKey writes "none" as the openssh-key-v1 cipher name.
+        assertFalse(SSHUtil.isEncryptedOpenSSHPrivateKey(SSHUtil.buildOpenSSHPrivateKey(kp, KeyPair.ED25519)));
+    }
+
+    @Test
+    void isEncryptedOpenSSHPrivateKeyRejectsAnythingItCannotParse() {
+        assertFalse(SSHUtil.isEncryptedOpenSSHPrivateKey(null));
+        assertFalse(SSHUtil.isEncryptedOpenSSHPrivateKey(""));
+        assertFalse(SSHUtil.isEncryptedOpenSSHPrivateKey("not a pem at all"));
+        // right envelope, unreadable contents - cannot prove encryption, so not encrypted
+        assertFalse(SSHUtil.isEncryptedOpenSSHPrivateKey(
+                "-----BEGIN OPENSSH PRIVATE KEY-----\n####\n-----END OPENSSH PRIVATE KEY-----\n"));
+        // valid base64, but not an openssh-key-v1 container
+        assertFalse(SSHUtil.isEncryptedOpenSSHPrivateKey(
+                "-----BEGIN OPENSSH PRIVATE KEY-----\n"
+                        + Base64.getEncoder().encodeToString("some other key format".getBytes())
+                        + "\n-----END OPENSSH PRIVATE KEY-----\n"));
+    }
+
+    @Test
+    void rewrapWithOpenSSHKeygenActuallyEncryptsTheKey() throws Exception {
+        assumeTrue(sshKeygenAvailable(), "ssh-keygen not on PATH");
+
+        KeyPairGenerator kpg = KeyPairGenerator.getInstance("Ed25519");
+        java.security.KeyPair kp = kpg.generateKeyPair();
+        String plain = SSHUtil.buildOpenSSHPrivateKey(kp, KeyPair.ED25519);
+
+        String rewrapped = SSHUtil.rewrapWithOpenSSHKeygen("7", plain, "correct horse battery staple");
+
+        assertTrue(SSHUtil.isEncryptedOpenSSHPrivateKey(rewrapped));
+        KeyPair loaded = KeyPair.load(new JSch(), rewrapped.getBytes(), null);
+        assertTrue(loaded.isEncrypted());
+        assertTrue(loaded.decrypt("correct horse battery staple"));
+        loaded.dispose();
+    }
+
+    @Test
+    void rewrapWithOpenSSHKeygenThrowsRatherThanReturningAnUnencryptedKey() throws Exception {
+        assumeTrue(sshKeygenAvailable(), "ssh-keygen not on PATH");
+
+        // Content ssh-keygen cannot load as a private key, so it exits non-zero having left
+        // the file exactly as it found it. This is precisely the shape of the old bug: the
+        // method returned that untouched file, so the caller received back the very bytes it
+        // passed in and had no way to tell they were not encrypted.
+        String notAKey = "-----BEGIN OPENSSH PRIVATE KEY-----\nnonsense\n-----END OPENSSH PRIVATE KEY-----\n";
+
+        GeneralSecurityException ex = assertThrows(GeneralSecurityException.class,
+                () -> SSHUtil.rewrapWithOpenSSHKeygen("7", notAKey, "correct horse battery staple"));
+
+        assertTrue(ex.getMessage().contains("ssh-keygen"), ex.getMessage());
+    }
+
+    private static boolean sshKeygenAvailable() {
+        try {
+            Process proc = new ProcessBuilder("ssh-keygen", "-?")
+                    .redirectErrorStream(true).start();
+            proc.getOutputStream().close();
+            proc.getInputStream().readAllBytes();
+            proc.waitFor();
+            return true;
+        } catch (Exception ex) {
+            return false;
+        }
     }
 
     @Test

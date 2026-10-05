@@ -16,6 +16,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Set;
 
 /**
  * DAO to manage scripts
@@ -24,6 +25,11 @@ public class ScriptDB {
 
     public static final String DISPLAY_NM = "display_nm";
     public static final String SORT_BY_DISPLAY_NM = DISPLAY_NM;
+    /**
+     * Columns the script list may be ordered by - see {@link SortedSet#toOrderByClause(Set)}.
+     * Mirrors the sortable headers in admin/view_scripts.html.
+     */
+    private static final Set<String> SORTABLE_FIELDS = Set.of(SORT_BY_DISPLAY_NM);
 
     private ScriptDB() {
     }
@@ -40,7 +46,7 @@ public class ScriptDB {
 
         ArrayList<Script> scriptList = new ArrayList<>();
 
-        String orderBy = sortedSet.toOrderByClause();
+        String orderBy = sortedSet.toOrderByClause(SORTABLE_FIELDS);
         String sql = "select * from scripts where user_id=?" + orderBy;
 
         try (Connection con = DBUtils.getConn();

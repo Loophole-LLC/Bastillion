@@ -7,6 +7,7 @@ package io.bastillion.manage.control;
 
 import io.bastillion.common.saml.SamlSettingsUtil;
 import io.bastillion.common.util.AppConfig;
+import io.bastillion.common.util.AuditLogUtil;
 import io.bastillion.common.util.AuthSessionUtil;
 import io.bastillion.common.util.AuthUtil;
 import io.bastillion.common.util.LoginThrottleUtil;
@@ -43,8 +44,12 @@ public class LoginKtrl extends BaseKontroller {
     private final String AUTH_ERROR_NO_PROFILE = "Authentication Failed : There are no profiles assigned to this account";
     private final String AUTH_ERROR_EXPIRED_ACCOUNT = "Authentication Failed : Account has expired";
     private final String SSO_ERROR = "Authentication Failed : Single sign-on login was not successful";
+    // Initialized rather than left null: BaseKontroller only default-constructs a model
+    // object when a request parameter names it, so POSTing /loginSubmit.ktrl with no auth.*
+    // parameters at all left this null and the NPE in validateLoginSubmit surfaced as an
+    // unauthenticated HTTP 500. Validation now reports the missing fields instead.
     @Model(name = "auth")
-    Auth auth;
+    Auth auth = new Auth();
     //bound from the ?ssoError= query param SamlAcsServlet redirects failures to - see
     //loophole.mvc.base.BaseKontroller's generic request-param field binding
     String ssoError;
@@ -103,7 +108,7 @@ public class LoginKtrl extends BaseKontroller {
         //throttle by client IP, not by username - a per-account lockout would let anyone
         //remotely lock out a known admin username by deliberately failing its password
         if (LoginThrottleUtil.isBlocked(clientIP)) {
-            loginAuditLogger.info(auth.getUsername() + " (" + clientIP + ") - " + AUTH_ERROR_TOO_MANY_ATTEMPTS);
+            auditLogin(clientIP, AUTH_ERROR_TOO_MANY_ATTEMPTS);
             addError(AUTH_ERROR_TOO_MANY_ATTEMPTS);
             return "/login.html";
         }
@@ -120,17 +125,17 @@ public class LoginKtrl extends BaseKontroller {
                 switch (result.status()) {
                     case NOT_FOUND, OTP_INVALID -> {
                         LoginThrottleUtil.recordFailure(clientIP);
-                        loginAuditLogger.info(auth.getUsername() + " (" + clientIP + ") - " + AUTH_ERROR);
+                        auditLogin(clientIP, AUTH_ERROR);
                         addError(AUTH_ERROR);
                         return "/login.html";
                     }
                     case NO_PROFILES -> {
-                        loginAuditLogger.info(auth.getUsername() + " (" + clientIP + ") - " + AUTH_ERROR_NO_PROFILE);
+                        auditLogin(clientIP, AUTH_ERROR_NO_PROFILE);
                         addError(AUTH_ERROR_NO_PROFILE);
                         return "/login.html";
                     }
                     case EXPIRED -> {
-                        loginAuditLogger.info(auth.getUsername() + " (" + clientIP + ") - " + AUTH_ERROR_EXPIRED_ACCOUNT);
+                        auditLogin(clientIP, AUTH_ERROR_EXPIRED_ACCOUNT);
                         addError(AUTH_ERROR_EXPIRED_ACCOUNT);
                         return "/login.html";
                     }
@@ -140,11 +145,11 @@ public class LoginKtrl extends BaseKontroller {
                             ? "redirect:/admin/userSettings.ktrl?defaultPassword=true" : "redirect:/admin/menu.html";
                 }
                 LoginThrottleUtil.recordSuccess(clientIP);
-                loginAuditLogger.info(auth.getUsername() + " (" + clientIP + ") - Authentication Success");
+                auditLogin(clientIP, "Authentication Success");
 
             } else {
                 LoginThrottleUtil.recordFailure(clientIP);
-                loginAuditLogger.info(auth.getUsername() + " (" + clientIP + ") - " + AUTH_ERROR);
+                auditLogin(clientIP, AUTH_ERROR);
                 addError(AUTH_ERROR);
                 retVal = "/login.html";
             }
@@ -157,6 +162,16 @@ public class LoginKtrl extends BaseKontroller {
         return retVal;
     }
 
+
+    /**
+     * Writes one login audit record. Both fields are request-supplied - the username needs no
+     * credentials at all - so both go through {@link AuditLogUtil#safe} rather than straight
+     * into the line.
+     */
+    private void auditLogin(String clientIP, String outcome) {
+        loginAuditLogger.info("{} ({}) - {}", AuditLogUtil.safe(auth.getUsername()),
+                AuditLogUtil.safe(clientIP), outcome);
+    }
 
     @Kontrol(path = "/logout", method = MethodType.GET)
     public String logout() {

@@ -5,7 +5,6 @@ import com.google.gson.JsonSyntaxException;
 import io.bastillion.common.util.AppConfig;
 import io.bastillion.common.util.AuthUtil;
 import io.bastillion.manage.control.SecureShellKtrl;
-import io.bastillion.manage.db.AuthDB;
 import io.bastillion.manage.db.UserDB;
 import io.bastillion.manage.model.SchSession;
 import io.bastillion.manage.model.UserSchSessions;
@@ -82,29 +81,14 @@ public class SecureShellWS {
     }
 
     /**
-     * Mirrors AuthFilter's check (valid, non-expired admin auth token) since that filter is
-     * never invoked for this endpoint's WebSocket upgrade request.
+     * Applies AuthFilter's check (valid, non-expired admin auth token) since that filter is
+     * never invoked for this endpoint's WebSocket upgrade request. Deliberately does not
+     * extend the session timeout the way AuthFilter does - a terminal left open should not
+     * keep the session alive on its own.
      */
     private boolean isAuthenticated() {
-        if (httpSession == null) {
-            return false;
-        }
         try {
-            String authToken = AuthUtil.getAuthToken(httpSession);
-            if (StringUtils.isEmpty(authToken)) {
-                return false;
-            }
-            String userType = AuthDB.isAuthorized(AuthUtil.getUserId(httpSession), authToken);
-            if (userType == null) {
-                return false;
-            }
-            String timeStr = AuthUtil.getTimeout(httpSession);
-            if (StringUtils.isEmpty(timeStr)) {
-                return false;
-            }
-            java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("MMddyyyyHHmmss");
-            java.util.Date sessionTimeout = sdf.parse(timeStr);
-            return sessionTimeout != null && !new java.util.Date().after(sessionTimeout);
+            return AuthUtil.authenticatedUserType(httpSession) != null;
         } catch (GeneralSecurityException | SQLException | java.text.ParseException ex) {
             log.error(ex.toString(), ex);
             return false;

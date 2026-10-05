@@ -66,7 +66,7 @@ public class ScriptKtrl extends BaseKontroller {
             log.error(ex.toString(), ex);
             throw new ServletException(ex.toString(), ex);
         }
-        return "redirect:/admin/viewScripts.ktrl?sortedSet.orderByDirection=" + sortedSet.getOrderByDirection() + "&sortedSet.orderByField=" + sortedSet.getOrderByField();
+        return "redirect:/admin/viewScripts.ktrl?" + sortedSet.toQueryString();
     }
 
     @Kontrol(path = "/admin/deleteScript", method = MethodType.GET)
@@ -81,7 +81,7 @@ public class ScriptKtrl extends BaseKontroller {
                 throw new ServletException(ex.toString(), ex);
             }
         }
-        return "redirect:/admin/viewScripts.ktrl?sortedSet.orderByDirection=" + sortedSet.getOrderByDirection() + "&sortedSet.orderByField=" + sortedSet.getOrderByField();
+        return "redirect:/admin/viewScripts.ktrl?" + sortedSet.toQueryString();
     }
 
 

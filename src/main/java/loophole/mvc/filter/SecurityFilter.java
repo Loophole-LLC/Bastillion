@@ -5,18 +5,20 @@
  */
 package loophole.mvc.filter;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.IOException;
-import java.security.SecureRandom;
 
 import jakarta.servlet.*;
 import jakarta.servlet.annotation.WebFilter;
 import jakarta.servlet.http.HttpServletResponse;
 
 /**
- * Filter that prevents click jacking, enforces transport security, etc..
+ * Framework-level response headers.
+ * <p>
+ * Deliberately limited to headers that need no application configuration, so this package
+ * stays independent of anything under io.bastillion. The headers that are a policy decision
+ * for the deployment - Content-Security-Policy and Strict-Transport-Security - belong to
+ * {@code io.bastillion.common.filter.SecurityHeadersFilter}, which is mapped to the same
+ * /* path and can read them from the application config.
  */
 @WebFilter(urlPatterns = {"/*"})
 public class SecurityFilter implements Filter {
@@ -28,14 +30,6 @@ public class SecurityFilter implements Filter {
     private static final String X_CONTENT_TYPE_HEADER = "X-Content-Type-Options";
     private static final String X_CONTENT_TYPE_VALUE = "nosniff";
 
-    // prevent cross-site scripting
-    private static final String X_XSS_PROTECT_HEADER = "X-XSS-Protection";
-    private static final String X_XSS_PROTECT_VALUE = "1; mode=block";
-
-    // strict-transport-security header
-    private static final String TRANSPORT_SECURITY_HEADER = "Strict-Transport-Security";
-    private static final String TRANSPORT_SECURITY_VALUE = "max-age=31536000";
-
     public void init(FilterConfig filterConfig) {
     }
 
@@ -44,14 +38,19 @@ public class SecurityFilter implements Filter {
 
         HttpServletResponse httpServletResponse = (HttpServletResponse) response;
 
-        // disable MIME sniffing
-        httpServletResponse.addHeader(X_CONTENT_TYPE_HEADER, X_CONTENT_TYPE_VALUE);
+        // setHeader, not addHeader: a header this filter owns should replace any earlier
+        // value rather than appear twice. For Strict-Transport-Security in particular a
+        // duplicate is not merely untidy - RFC 6797 section 8.1 requires a UA that receives
+        // more than one to ignore all of them, silently disabling HSTS.
+        httpServletResponse.setHeader(X_CONTENT_TYPE_HEADER, X_CONTENT_TYPE_VALUE);
 
-        // block cross-site scripting
-        httpServletResponse.addHeader(X_XSS_PROTECT_HEADER, X_XSS_PROTECT_VALUE);
-
-        // transport security header
-        httpServletResponse.addHeader(TRANSPORT_SECURITY_HEADER, TRANSPORT_SECURITY_VALUE);
+        // X-XSS-Protection is deliberately not set. It drove the XSS Auditor / XSS Filter,
+        // which Chrome removed in 2019 and Edge before it, and which Firefox and Safari never
+        // implemented - so no current browser acts on it. While it was live, "1; mode=block"
+        // was itself exploitable as a way to selectively disable scripts on a page and as a
+        // cross-site information leak, which is why the auditors were withdrawn rather than
+        // fixed. The Content-Security-Policy set by SecurityHeadersFilter is what actually
+        // constrains script execution now.
 
         filterChain.doFilter(request, response);
 

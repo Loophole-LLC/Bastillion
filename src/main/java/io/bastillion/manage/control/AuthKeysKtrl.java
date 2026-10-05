@@ -163,9 +163,7 @@ public class AuthKeysKtrl extends BaseKontroller {
             handleException(ex);
         }
 
-        return "redirect:/admin/viewKeys.ktrl?sortedSet.orderByDirection=" +
-                sortedSet.getOrderByDirection() + "&sortedSet.orderByField=" +
-                sortedSet.getOrderByField() + "&keyNm=" + publicKey.getKeyNm();
+        return "redirect:/admin/viewKeys.ktrl?" + sortedSet.toQueryString() + "&keyNm=" + publicKey.getKeyNm();
     }
 
     @Kontrol(path = "/admin/deletePublicKey", method = MethodType.GET)
@@ -179,9 +177,7 @@ public class AuthKeysKtrl extends BaseKontroller {
         } catch (SQLException | GeneralSecurityException ex) {
             handleException(ex);
         }
-        return "redirect:/admin/viewKeys.ktrl?sortedSet.orderByDirection=" +
-                sortedSet.getOrderByDirection() + "&sortedSet.orderByField=" +
-                sortedSet.getOrderByField();
+        return "redirect:/admin/viewKeys.ktrl?" + sortedSet.toQueryString();
     }
 
     @Kontrol(path = "/admin/downloadPvtKey", method = MethodType.GET)

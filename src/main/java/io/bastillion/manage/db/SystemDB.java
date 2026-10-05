@@ -17,6 +17,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 
 /**
@@ -34,6 +35,12 @@ public class SystemDB {
     public static final String STATUS_CD = "status_cd";
     public static final String PROFILE_ID = "profile_id";
     public static final String SORT_BY_STATUS = STATUS_CD;
+    /**
+     * Columns the system lists may be ordered by - see {@link SortedSet#toOrderByClause(Set)}.
+     * Mirrors the sortable headers in admin/view_systems.html and manage/view_systems.html.
+     */
+    private static final Set<String> SORTABLE_FIELDS =
+            Set.of(SORT_BY_NAME, SORT_BY_USER, SORT_BY_HOST, SORT_BY_STATUS);
 
     private SystemDB() {
     }
@@ -49,7 +56,7 @@ public class SystemDB {
     public static SortedSet getUserSystemSet(SortedSet sortedSet, Long userId) throws SQLException, GeneralSecurityException {
         List<HostSystem> hostSystemList = new ArrayList<>();
 
-        String orderBy = sortedSet.toOrderByClause();
+        String orderBy = sortedSet.toOrderByClause(SORTABLE_FIELDS);
         String sql = "select * from system where id in (select distinct system_id from  system_map m, user_map um where m.profile_id=um.profile_id and um.user_id=? ";
         //if profile id exists add to statement
         sql += StringUtils.isNotEmpty(sortedSet.getFilterMap().get(FILTER_BY_PROFILE_ID)) ? " and um.profile_id=? " : "";
@@ -94,7 +101,7 @@ public class SystemDB {
     public static SortedSet getSystemSet(SortedSet sortedSet, Long profileId) throws SQLException, GeneralSecurityException {
         List<HostSystem> hostSystemList = new ArrayList<>();
 
-        String orderBy = sortedSet.toOrderByClause();
+        String orderBy = sortedSet.toOrderByClause(SORTABLE_FIELDS);
         String sql = "select s.*, m.profile_id from  system s left join system_map  m on m.system_id = s.id and m.profile_id = ?" + orderBy;
 
         try (Connection con = DBUtils.getConn();
@@ -130,7 +137,7 @@ public class SystemDB {
     public static SortedSet getSystemSet(SortedSet sortedSet) throws SQLException, GeneralSecurityException {
         List<HostSystem> hostSystemList = new ArrayList<>();
 
-        String orderBy = sortedSet.toOrderByClause();
+        String orderBy = sortedSet.toOrderByClause(SORTABLE_FIELDS);
         String sql = "select * from  system s ";
         //if profile id exists add to statement
         sql += StringUtils.isNotEmpty(sortedSet.getFilterMap().get(FILTER_BY_PROFILE_ID)) ? ",system_map m where s.id=m.system_id and m.profile_id=?" : "";

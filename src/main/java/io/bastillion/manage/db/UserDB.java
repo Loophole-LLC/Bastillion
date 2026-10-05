@@ -20,6 +20,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
 import java.util.ArrayList;
+import java.util.Set;
 import java.util.Calendar;
 import java.util.Date;
 
@@ -41,6 +42,14 @@ public class UserDB {
     public static final String PROFILE_ID = "profile_id";
     public static final String LAST_LOGIN_TM = "last_login_tm";
     public static final String EXPIRATION_TM = "expiration_tm";
+    /**
+     * Columns the user list may be ordered by - see {@link SortedSet#toOrderByClause(Set)}.
+     * Mirrors the sortable headers in manage/view_users.html. Note what is deliberately
+     * absent: PASSWORD (and the salt and otp_secret columns, which have no constant here).
+     * Ordering by a credential column reveals the relative order of every stored value.
+     */
+    private static final Set<String> SORTABLE_FIELDS = Set.of(
+            FIRST_NM, LAST_NM, EMAIL, USERNAME, USER_TYPE, AUTH_TYPE, LAST_LOGIN_TM, EXPIRATION_TM);
 
     private UserDB() {
     }
@@ -55,7 +64,7 @@ public class UserDB {
 
         ArrayList<User> userList = new ArrayList<>();
 
-        String orderBy = sortedSet.toOrderByClause();
+        String orderBy = sortedSet.toOrderByClause(SORTABLE_FIELDS);
         String sql = "select * from  users" + orderBy;
 
         try (Connection con = DBUtils.getConn();
@@ -95,7 +104,7 @@ public class UserDB {
         ArrayList<User> userList = new ArrayList<>();
 
 
-        String orderBy = sortedSet.toOrderByClause();
+        String orderBy = sortedSet.toOrderByClause(SORTABLE_FIELDS);
         String sql = "select u.*, m.profile_id from users u left join user_map  m on m.user_id = u.id and m.profile_id = ? where u.user_type like '" + User.ADMINISTRATOR + "'" + orderBy;
 
         try (Connection con = DBUtils.getConn();

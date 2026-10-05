@@ -44,6 +44,29 @@ public class DBInitServlet extends jakarta.servlet.http.HttpServlet {
     private static final Logger log = LoggerFactory.getLogger(DBInitServlet.class);
 
     /**
+     * Bastillion's known_hosts - see io.bastillion.manage.util.HostKeyVerifier. One row per
+     * host, port and key type. The offered_* columns hold the key a host presented when it
+     * did not match the trusted one, so the two can be compared instead of the new key
+     * quietly replacing the approved one.
+     */
+    private static final String CREATE_HOST_KEY_TABLE =
+            "create table if not exists host_key ("
+                    + "id INTEGER PRIMARY KEY AUTO_INCREMENT, "
+                    + "host varchar not null, "
+                    + "port INTEGER not null, "
+                    + "type varchar not null, "
+                    + "public_key varchar not null, "
+                    + "fingerprint varchar not null, "
+                    + "status varchar not null default 'TRUSTED', "
+                    + "offered_public_key varchar, "
+                    + "offered_fingerprint varchar, "
+                    + "first_seen_tm timestamp not null default CURRENT_TIMESTAMP(), "
+                    + "approved_tm timestamp, "
+                    + "approved_by INTEGER, "
+                    + "foreign key (approved_by) references users(id) on delete set null, "
+                    + "unique (host, port, type))";
+
+    /**
      * task init method that created DB and generated public/private keys
      *
      * @param config task config
@@ -115,6 +138,8 @@ public class DBInitServlet extends jakarta.servlet.http.HttpServlet {
 
                 statement.executeUpdate("create table if not exists public_keys (id INTEGER PRIMARY KEY AUTO_INCREMENT, key_nm varchar not null, type varchar, fingerprint varchar, public_key varchar, enabled boolean not null default true, create_dt timestamp not null default CURRENT_TIMESTAMP(), user_id INTEGER, profile_id INTEGER, foreign key (profile_id) references profiles(id) on delete cascade, foreign key (user_id) references users(id) on delete cascade)");
 
+                statement.executeUpdate(CREATE_HOST_KEY_TABLE);
+
                 statement.executeUpdate("create table if not exists session_log (id BIGINT PRIMARY KEY AUTO_INCREMENT, session_tm timestamp default CURRENT_TIMESTAMP, first_nm varchar, last_nm varchar, username varchar not null, ip_address varchar)");
                 statement.executeUpdate("create table if not exists terminal_log (session_id BIGINT, instance_id INTEGER, output varchar not null, log_tm timestamp default CURRENT_TIMESTAMP, display_nm varchar not null, username varchar not null, host varchar not null, port INTEGER not null, foreign key (session_id) references session_log(id) on delete cascade)");
 
@@ -146,6 +171,12 @@ public class DBInitServlet extends jakarta.servlet.http.HttpServlet {
             // Existing installations predate the interface-theme preference. H2's
             // IF NOT EXISTS makes this migration safe on every subsequent startup.
             statement.executeUpdate("alter table user_theme add column if not exists ui_theme varchar(5) not null default 'dark'");
+
+            // Existing installations predate host key verification and have no recorded keys,
+            // which is why hostKeyVerification defaults to accept-new rather than strict - an
+            // upgrade records each host's key on its next connection instead of refusing every
+            // connection until a manager has approved every host.
+            statement.executeUpdate(CREATE_HOST_KEY_TABLE);
 
             //if reset ssh application key then generate new key
             if (resetSSHKey) {

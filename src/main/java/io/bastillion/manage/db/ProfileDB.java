@@ -17,6 +17,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 
 /**
@@ -27,6 +28,11 @@ public class ProfileDB {
     public static final String FILTER_BY_SYSTEM = "system";
     public static final String FILTER_BY_USER = "username";
     public static final String SORT_BY_PROFILE_NM = "nm";
+    /**
+     * Columns the profile list may be ordered by - see {@link SortedSet#toOrderByClause(Set)}.
+     * Mirrors the sortable headers in manage/view_profiles.html.
+     */
+    private static final Set<String> SORTABLE_FIELDS = Set.of(SORT_BY_PROFILE_NM);
 
     private ProfileDB() {
     }
@@ -40,7 +46,7 @@ public class ProfileDB {
 
         ArrayList<Profile> profileList = new ArrayList<>();
 
-        String orderBy = sortedSet.toOrderByClause();
+        String orderBy = sortedSet.toOrderByClause(SORTABLE_FIELDS);
         String sql = "select distinct p.* from  profiles p ";
         if (StringUtils.isNotEmpty(sortedSet.getFilterMap().get(FILTER_BY_SYSTEM))) {
             sql = sql + ", system_map m, system s where m.profile_id = p.id and m.system_id = s.id" +

@@ -74,10 +74,10 @@ class DispatcherServletTest {
 
     @Test
     void unmatchedUriWithNothingWrittenYetSends404() throws Exception {
-        // No registered @Kontrol path is a substring of this URI, so BaseKontroller.execute()
-        // never reaches the "&&" that checks HTTP method - request.getMethod() is genuinely
-        // never called here, unlike the matched-path tests above.
+        // No route is registered for this servlet path, so BaseKontroller.execute() returns
+        // a null forward and the servlet falls through to sendError().
         when(request.getServletPath()).thenReturn("/doesNotExist.ktrl");
+        when(request.getMethod()).thenReturn("GET");
         when(response.isCommitted()).thenReturn(false);
 
         servlet.doGet(request, response);
@@ -93,6 +93,7 @@ class DispatcherServletTest {
         // already-committed response throws IllegalStateException("COMPLETED") in Jetty, even
         // though the response was already sent to the client successfully.
         when(request.getServletPath()).thenReturn("/doesNotExist.ktrl");
+        when(request.getMethod()).thenReturn("GET");
         when(response.isCommitted()).thenReturn(true);
 
         servlet.doGet(request, response);
