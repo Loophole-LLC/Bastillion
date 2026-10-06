@@ -348,9 +348,16 @@ and moves it into `./config` (or into `CONFIG_DIR`, if you've now set one) autom
 <details>
 <summary><strong>SSH Key Management</strong></summary>
 
+How much of each managed system's `authorized_keys` file Bastillion takes responsibility for:
+
 ```bash
-# Disable key management (append instead of overwrite)
-export KEY_MANAGEMENT_ENABLED=false
+# manage (default) - Bastillion owns the file: it is replaced with the public keys of every
+#                    user assigned to that system, plus Bastillion's own. Revoking a user's
+#                    key removes their direct access to the host on the next refresh.
+# append           - leave the file alone except for making sure Bastillion's own key is in
+#                    it. User keys are not distributed.
+# off              - never read or write the file at all.
+export KEY_MANAGEMENT=manage
 
 # authorized_keys refresh interval in minutes (no refresh for <=0)
 export AUTH_KEYS_REFRESH_INTERVAL=120
@@ -358,6 +365,19 @@ export AUTH_KEYS_REFRESH_INTERVAL=120
 # Force user key generation and strong passphrases
 export FORCE_USER_KEY_GENERATION=false
 ```
+
+`off` is only usable when Bastillion can authenticate some other way — in practice
+`sshCertificateAuth=on` with the authority installed on every host, since otherwise there is
+nothing for it to log in with. Bastillion warns loudly at startup if both are off. It also
+gives up the fallback: with no application key on the host, a certificate problem locks
+Bastillion out of that system instead of degrading to key authentication.
+
+In `append` and `off` the refresh timer and the **Manage SSH Keys** screens are hidden —
+there is nothing left for them to distribute.
+
+> The older boolean `KEY_MANAGEMENT_ENABLED` still works and is honoured when `KEY_MANAGEMENT`
+> is unset (`true` → `manage`, `false` → `append`), so an existing instance keeps the
+> behaviour it had. Prefer `KEY_MANAGEMENT` in new setups.
 </details>
 
 <details>
@@ -486,9 +506,16 @@ they can `ssh` in directly, outside Bastillion. Certificates here cover only Bas
 sessions. Running both is the normal arrangement: browser terminals authenticate by
 certificate, and engineers who need a direct shell still get their keys distributed.
 
-Keeping the application key in `authorized_keys` is also a deliberate safety net: if signing
-ever fails, Bastillion falls back to plain public key authentication and logs an error, which
-only works while that key is still there.
+If nobody needs direct access and you want Bastillion to stop touching `authorized_keys`
+entirely, set `KEY_MANAGEMENT=off` alongside this — see
+[SSH Key Management](#configuration). Two things you give up by doing so:
+
+- **Direct user access.** Nothing distributes user keys any more, and certificates for users'
+  own SSH clients are not implemented — only for Bastillion's own sessions.
+- **The fallback.** If signing ever fails, Bastillion falls back to plain public key
+  authentication and logs an error — but only while its key is still in `authorized_keys`.
+  With `off` that key is never placed, so a certificate authority problem becomes a lockout
+  from every system instead of a logged degradation.
 
 What it buys, beyond not distributing keys: Bastillion authenticates to every system with
 one shared application key, so a host's own logs cannot tell which Bastillion user was

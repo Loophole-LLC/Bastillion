@@ -35,7 +35,14 @@ public class SSHUtil {
     public static final String PRIVATE_KEY = "privateKey";
     public static final String PUBLIC_KEY = "publicKey";
     private static final Logger log = LoggerFactory.getLogger(SSHUtil.class);
-    public static final boolean keyManagementEnabled = "true".equals(AppConfig.getProperty("keyManagementEnabled"));
+    /**
+     * True when Bastillion distributes user public keys to hosts and owns their
+     * authorized_keys files - {@link KeyManagement.Mode#MANAGE}. Gates the refresh timer, the
+     * distribution loops below, and the "Manage SSH Keys" screens (referenced from the
+     * navigation and menu templates), all of which have nothing to do in the other modes.
+     * See {@link KeyManagement} for the full three-way setting.
+     */
+    public static final boolean keyManagementEnabled = KeyManagement.distributesUserKeys();
 
     public static final String KEY_PATH = AppConfig.CONFIG_DIR + "keydb";
     public static final String KEY_TYPE = AppConfig.getProperty("sshKeyType");
@@ -207,6 +214,13 @@ public class SSHUtil {
     // ---- SSH key distribution methods ----
 
     public static HostSystem addPubKey(HostSystem hostSystem, Session session, String appPublicKey) {
+        if (!KeyManagement.writesAuthorizedKeys()) {
+            // keyManagement=off: the host's authorized_keys is not ours to touch. Reaching
+            // here at all means authentication already succeeded by some other means, which
+            // in practice is an SSH certificate - so there is nothing to add and nothing to
+            // reconcile. Status is left as the caller set it.
+            return hostSystem;
+        }
         try {
             String authorizedKeys = hostSystem.getAuthorizedKeys().replaceAll("~\\/|~", "");
             if (!isSafeAuthorizedKeysPath(authorizedKeys)) {

@@ -13,7 +13,9 @@ import io.bastillion.manage.model.CertAuthority;
 import io.bastillion.manage.util.DBUtils;
 import io.bastillion.manage.util.EncryptionUtil;
 import io.bastillion.manage.util.RefreshAuthKeyUtil;
+import io.bastillion.manage.util.KeyManagement;
 import io.bastillion.manage.util.SSHUtil;
+import io.bastillion.manage.util.SshCertificateAuth;
 import org.apache.commons.configuration2.ex.ConfigurationException;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -259,6 +261,20 @@ public class DBInitServlet extends jakarta.servlet.http.HttpServlet {
                 //set to false
                 AppConfig.updateProperty("resetApplicationSSHKey", "false");
 
+            }
+
+            // keyManagement=off means Bastillion never puts its key on a host, so with
+            // certificate authentication also off it has no way to gain access to a system it
+            // has not already been let into by hand. Worth saying out loud at startup rather
+            // than leaving as a run of failed registrations.
+            if (KeyManagement.mode() == KeyManagement.Mode.OFF && !SshCertificateAuth.isEnabled()) {
+                String warning = "WARNING: keyManagement=off and sshCertificateAuth=off. Bastillion "
+                        + "will not add its public key to any system, so a system is only reachable if "
+                        + "its authorized_keys already contains the application key. Set "
+                        + "sshCertificateAuth=on (and install the CA key on each host), or use "
+                        + "keyManagement=append.";
+                System.out.println(warning);
+                log.error(warning);
             }
 
             //delete ssh keys
