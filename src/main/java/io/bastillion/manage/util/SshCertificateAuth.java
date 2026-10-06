@@ -52,6 +52,26 @@ public class SshCertificateAuth {
     }
 
     /**
+     * Why this application key cannot be certified, or null if it can.
+     * <p>
+     * Certificates attest to the key the session authenticates with, which is the application
+     * key, and {@link SshCertificateUtil} signs Ed25519 only. {@code sshKeyType} also accepts
+     * rsa, ecdsa and ed448, so this is a supported configuration that certificates cannot work
+     * with - and every symptom of it points somewhere else: connections keep succeeding,
+     * because issuing falls back to plain key authentication. Checked in one place so the
+     * startup warning, the fallback log line and the per-system test all name the real cause.
+     */
+    public static String unsupportedKeyTypeReason(String applicationPublicKey) {
+        String keyType = SSHUtil.getKeyType(applicationPublicKey);
+        if (keyType == null || SshCertificateUtil.ED25519_KEY_TYPE.equalsIgnoreCase("ssh-" + keyType)) {
+            return null;
+        }
+        return "The application SSH key is " + keyType + ", but certificates can only be issued for "
+                + "an Ed25519 key. Set sshKeyType=ed25519 and replace the application key "
+                + "(Settings -> Replace application SSH key), or leave sshCertificateAuth off.";
+    }
+
+    /**
      * @return true when Bastillion should authenticate with a certificate it signs rather than
      * relying on its public key being in the target's authorized_keys
      */
@@ -99,6 +119,11 @@ public class SshCertificateAuth {
             }
             ApplicationKey appKey = PrivateKeyDB.getApplicationKey();
             if (appKey == null) {
+                return null;
+            }
+            String unsupported = unsupportedKeyTypeReason(appKey.getPublicKey());
+            if (unsupported != null) {
+                log.error("{} Falling back to plain public key authentication.", unsupported);
                 return null;
             }
 

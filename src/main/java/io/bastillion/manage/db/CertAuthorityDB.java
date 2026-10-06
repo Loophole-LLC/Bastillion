@@ -29,6 +29,13 @@ import java.util.Base64;
  */
 public class CertAuthorityDB {
 
+    // There is deliberately no rotate() here. Replacing the keypair in one step invalidates
+    // every certificate the old key signed the moment it runs, while the hosts still trust
+    // only the old CA - so connections fail until the new public key has been installed
+    // everywhere. Doing it safely means serving both keys at once (hosts accept several in
+    // TrustedUserCAKeys) and retiring the old one after the fleet has caught up, which is a
+    // feature rather than a method. An unreachable one-step version was worse than none.
+
     private CertAuthorityDB() {
     }
 
@@ -87,22 +94,6 @@ public class CertAuthorityDB {
             stmt.executeUpdate();
         }
         return publicKey;
-    }
-
-    /**
-     * Replaces the authority keypair, invalidating every certificate it previously signed.
-     * <p>
-     * Hosts can list more than one key in TrustedUserCAKeys, so a rotation can be made without
-     * an outage: add the new public key to every host alongside the old one, rotate here, then
-     * remove the old one. Nothing enforces that ordering, hence the warning on the caller.
-     */
-    public static void rotate(String type) throws SQLException, GeneralSecurityException, IOException {
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement("delete from cert_authority where type = ?")) {
-            stmt.setString(1, type);
-            stmt.executeUpdate();
-        }
-        generateIfAbsent(type);
     }
 
     /**

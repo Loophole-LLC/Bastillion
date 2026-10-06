@@ -20,7 +20,9 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mockStatic;
 
@@ -166,6 +168,58 @@ class SshCertificateAuthTest {
 
             assertNull(SshCertificateAuth.issueCertificate(system(null), "alice"));
         }
+    }
+
+    // --- the application key has to be Ed25519, and sshKeyType allows others ---
+
+    @Test
+    void namesTheKeyTypeWhenTheApplicationKeyCannotBeCertified() throws Exception {
+        // An RSA application key is a supported sshKeyType, but certificates can only attest
+        // to an Ed25519 key. The failure is otherwise invisible: issuing returns null and
+        // connections keep working by falling back to plain key authentication.
+        String rsa = "ssh-rsa " + Base64.getEncoder().encodeToString(
+                sshBlob("ssh-rsa", new byte[]{1, 2, 3})) + " bastillion@global_key";
+
+        String reason = SshCertificateAuth.unsupportedKeyTypeReason(rsa);
+
+        assertNotNull(reason);
+        assertTrue(reason.contains("RSA"), reason);
+        assertTrue(reason.contains("sshKeyType=ed25519"), reason);
+    }
+
+    @Test
+    void acceptsAnEd25519ApplicationKey() throws Exception {
+        assertNull(SshCertificateAuth.unsupportedKeyTypeReason(publicKey(newKeyPair(), "bastillion@global_key")));
+    }
+
+    @Test
+    void refusesToIssueForAnUncertifiableApplicationKey() throws Exception {
+        Fixture f = fixture();
+        ApplicationKey rsaKey = new ApplicationKey();
+        rsaKey.setId(1L);
+        rsaKey.setPublicKey("ssh-rsa " + Base64.getEncoder().encodeToString(
+                sshBlob("ssh-rsa", new byte[]{1, 2, 3})) + " bastillion@global_key");
+        rsaKey.setPrivateKey(f.appKey().getPrivateKey());
+
+        try (MockedStatic<CertAuthorityDB> caDb = mockStatic(CertAuthorityDB.class);
+             MockedStatic<PrivateKeyDB> keyDb = mockStatic(PrivateKeyDB.class)) {
+            caDb.when(() -> CertAuthorityDB.getCertAuthority(CertAuthority.USER_CA)).thenReturn(f.ca());
+            keyDb.when(PrivateKeyDB::getApplicationKey).thenReturn(rsaKey);
+
+            assertNull(SshCertificateAuth.issueCertificate(system("deploy"), "alice"));
+            // and no serial is burned on a certificate that was never going to be issued
+            caDb.verify(() -> CertAuthorityDB.nextSerial(anyString()), org.mockito.Mockito.never());
+        }
+    }
+
+    private static byte[] sshBlob(String type, byte[] body) throws Exception {
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        byte[] t = type.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        out.write(new byte[]{0, 0, 0, (byte) t.length});
+        out.write(t);
+        out.write(new byte[]{0, 0, 0, (byte) body.length});
+        out.write(body);
+        return out.toByteArray();
     }
 
     @Test

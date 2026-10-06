@@ -625,6 +625,10 @@ public class SSHUtil {
             if (appKey == null) {
                 return new CertificateTestResult(false, "No application SSH key has been generated yet.");
             }
+            String unsupported = SshCertificateAuth.unsupportedKeyTypeReason(appKey.getPublicKey());
+            if (unsupported != null) {
+                return new CertificateTestResult(false, unsupported);
+            }
             String certificate = SshCertificateAuth.issueCertificate(hostSystem, username);
             if (certificate == null) {
                 return new CertificateTestResult(false,

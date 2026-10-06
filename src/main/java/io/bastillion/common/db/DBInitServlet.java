@@ -8,6 +8,8 @@ package io.bastillion.common.db;
 import com.jcraft.jsch.JSchException;
 import io.bastillion.common.util.AppConfig;
 import io.bastillion.manage.db.CertAuthorityDB;
+import io.bastillion.manage.db.PrivateKeyDB;
+import io.bastillion.manage.model.ApplicationKey;
 import io.bastillion.manage.model.Auth;
 import io.bastillion.manage.model.CertAuthority;
 import io.bastillion.manage.util.DBUtils;
@@ -280,6 +282,24 @@ public class DBInitServlet extends jakarta.servlet.http.HttpServlet {
                         + "keyManagement=append.";
                 System.out.println(warning);
                 log.error(warning);
+            }
+
+            // sshCertificateAuth only works with an Ed25519 application key, and sshKeyType
+            // accepts rsa/ecdsa/ed448 too. Without this the mismatch is invisible: issuing
+            // fails, connections quietly fall back to plain key authentication and keep
+            // working, so nothing looks wrong until somebody wonders why no host ever logs a
+            // certificate.
+            if (SshCertificateAuth.isEnabled()) {
+                ApplicationKey appKey = PrivateKeyDB.getApplicationKey();
+                String unsupported = appKey == null ? null
+                        : SshCertificateAuth.unsupportedKeyTypeReason(appKey.getPublicKey());
+                if (unsupported != null) {
+                    String warning = "WARNING: sshCertificateAuth=on. " + unsupported
+                            + " Until then every connection silently falls back to plain public "
+                            + "key authentication.";
+                    System.out.println(warning);
+                    log.error(warning);
+                }
             }
 
             //delete ssh keys
