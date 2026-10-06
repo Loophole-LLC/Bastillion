@@ -214,6 +214,11 @@ public class DBInitServlet extends jakarta.servlet.http.HttpServlet {
             statement.executeUpdate(CREATE_CERT_AUTHORITY_TABLE);
             statement.executeUpdate(CREATE_HOST_CERT_AUTHORITY_TABLE);
 
+            // How the last connection to each system authenticated, so a certificate rollout
+            // can be seen on the systems screen rather than only in the audit log. Null on
+            // every existing row until that system is next connected to.
+            statement.executeUpdate("alter table system add column if not exists last_auth_method varchar");
+
             // Generated whether or not certificate authentication is switched on: the public
             // half has to be installed on every managed system as TrustedUserCAKeys before the
             // feature can be enabled, so an operator has to be able to read it first. On its

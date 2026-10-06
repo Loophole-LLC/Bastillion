@@ -7,6 +7,7 @@ package io.bastillion.common.filter;
 
 import io.bastillion.common.util.AuthUtil;
 import io.bastillion.manage.model.Auth;
+import io.bastillion.manage.util.HostKeyAlert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -29,6 +30,12 @@ import java.text.ParseException;
 public class AuthFilter implements Filter {
 
     private static final Logger log = LoggerFactory.getLogger(AuthFilter.class);
+
+    /**
+     * Request attribute holding the number of host keys currently refusing connections, read
+     * by the navigation fragment to badge the Host Keys link.
+     */
+    public static final String BLOCKED_HOST_KEYS = "blockedHostKeyCount";
 
     public void init(FilterConfig config) throws ServletException {
 
@@ -68,6 +75,16 @@ public class AuthFilter implements Filter {
                 AuthUtil.setUserType(servletRequest.getSession(), userType);
                 //extend the window on activity
                 AuthUtil.setTimeout(servletRequest.getSession());
+
+                // Published here rather than read from the navigation fragment directly:
+                // Thymeleaf 3.1 restricts calling static methods from expressions (static
+                // fields, as the fragment uses elsewhere, are still fine), and a template
+                // reaching into the data layer for a live count is the wrong shape anyway.
+                // Managers only - nobody else can act on it. HostKeyAlert caches, so this is
+                // not a query per request.
+                if (Auth.MANAGER.equals(userType)) {
+                    servletRequest.setAttribute(BLOCKED_HOST_KEYS, HostKeyAlert.blockingCount());
+                }
             }
 
             //if not admin redirect to login page

@@ -34,6 +34,11 @@
                 $(this).parents('.modal').find('form').submit();
             });
 
+            //certificate test posts its own per-row form
+            $(".cert_test_btn").click(function () {
+                $('#' + $(this).data('form')).submit();
+            });
+
             $(".sort").click(function () {
                 var id = $(this).attr('id');
 
@@ -94,6 +99,11 @@
         <input type="hidden" id="viewSystems_sortedSet_orderByField" name="sortedSet.orderByField"
                th:value="${sortedSet.orderByField}">
         <h3>Manage Systems</h3>
+        <div th:if="${certTestMessage != null}" class="alert"
+             th:classappend="${certTestOk} ? 'alert-success' : 'alert-danger'">
+            <strong th:text="${certTestOk} ? 'Certificate accepted' : 'Certificate not accepted'"></strong>
+            <span th:text="${certTestMessage}"></span>
+        </div>
         <p>Manage connections and distribute SSH keys.</p>
         <div th:if="${profileList != null && !profileList.empty}">
             <table>
@@ -128,6 +138,7 @@
                 <th th:id="${@io.bastillion.manage.db.SystemDB@SORT_BY_STATUS}"
                     class="sort">Status
                 </th>
+                <th>Auth</th>
                 <th><span class="visually-hidden">Actions</span></th>
             </tr>
             </thead>
@@ -151,11 +162,36 @@
                         <div class="warning" th:if="${#strings.equals(s.statusCd, 'KEYAUTHFAIL')}">Passphrase
                             Authentication Failed
                         </div>
+                        <div class="error" th:if="${#strings.equals(s.statusCd, 'HOSTKEYFAIL')}">Host key
+                            refused &ndash; <a th:href="'viewHostKeys.ktrl?_csrf=' + ${session._csrf}">review</a>
+                        </div>
                         <div class="error" th:if="${#strings.equals(s.statusCd, 'GENERICFAIL')}">Failed</div>
                         <div class="success" th:if="${#strings.equals(s.statusCd, 'SUCCESS')}">Success</div>
                     </td>
                     <td>
+                        <span th:if="${#strings.equals(s.lastAuthMethod, 'CERTIFICATE')}" class="success"
+                              title="Last connected using a Bastillion-signed certificate">certificate</span>
+                        <span th:if="${#strings.equals(s.lastAuthMethod, 'KEY')}"
+                              title="Last connected using the application key from this host's authorized_keys">key</span>
+                        <span th:if="${s.lastAuthMethod == null}" class="warning"
+                              title="Not connected since this was recorded">&ndash;</span>
+                    </td>
+                    <td>
                         <div>
+                            <form th:id="'cert_test_frm_' + ${s.id}"
+                                  th:action="@{/manage/testCertificateAuth.ktrl}" method="post">
+                                <input type="hidden" name="_csrf" th:value="${session._csrf}">
+                                <input type="hidden" name="hostSystem.id" th:value="${s.id}">
+                                <input type="hidden" name="sortedSet.orderByDirection"
+                                       th:value="${sortedSet.orderByDirection}">
+                                <input type="hidden" name="sortedSet.orderByField"
+                                       th:value="${sortedSet.orderByField}">
+                            </form>
+                            <button th:attr="data-form='cert_test_frm_' + ${s.id}"
+                                    class="btn btn-secondary cert_test_btn"
+                                    title="Open a test connection using a certificate, without changing this system's status">
+                                Test cert
+                            </button>
                             <button th:id="'refresh_btn_' + ${s.id}"
                                     class="btn btn-secondary refresh_btn"
                                     aria-label="Refresh system status" title="Refresh status">

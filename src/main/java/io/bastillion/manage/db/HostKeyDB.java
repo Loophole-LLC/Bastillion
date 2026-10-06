@@ -8,6 +8,7 @@ package io.bastillion.manage.db;
 import io.bastillion.manage.model.KnownHostKey;
 import io.bastillion.manage.model.SortedSet;
 import io.bastillion.manage.util.DBUtils;
+import io.bastillion.manage.util.HostKeyAlert;
 
 import java.security.GeneralSecurityException;
 import java.sql.Connection;
@@ -129,7 +130,9 @@ public class HostKeyDB {
             stmt.setString(6, status);
             stmt.executeUpdate();
         }
-        }
+            // keep the navigation badge honest about what is currently blocked
+        HostKeyAlert.invalidate();
+    }
 
     /**
      * Flags a host as presenting a key other than its trusted one, keeping both.
@@ -152,7 +155,9 @@ public class HostKeyDB {
             stmt.setString(6, type);
             stmt.executeUpdate();
         }
-        }
+            // keep the navigation badge honest about what is currently blocked
+        HostKeyAlert.invalidate();
+    }
 
     /**
      * Trusts a host key: approves a pending one, or accepts the newly offered key of a
@@ -180,7 +185,9 @@ public class HostKeyDB {
             stmt.setLong(4, id);
             stmt.executeUpdate();
         }
-        }
+            // keep the navigation badge honest about what is currently blocked
+        HostKeyAlert.invalidate();
+    }
 
     /**
      * Distrusts a host key without forgetting it, so connections stay refused rather than
@@ -194,7 +201,9 @@ public class HostKeyDB {
             stmt.setLong(2, id);
             stmt.executeUpdate();
         }
-        }
+            // keep the navigation badge honest about what is currently blocked
+        HostKeyAlert.invalidate();
+    }
 
     /**
      * Forgets a host key entirely, so the next connection treats the host as new.
@@ -205,7 +214,9 @@ public class HostKeyDB {
             stmt.setLong(1, id);
             stmt.executeUpdate();
         }
-        }
+            // keep the navigation badge honest about what is currently blocked
+        HostKeyAlert.invalidate();
+    }
 
     /**
      * @return host keys a manager has explicitly distrusted

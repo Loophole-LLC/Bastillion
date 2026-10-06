@@ -114,10 +114,10 @@
                 new bootstrap.Modal($("#upload_push_dialog")).show();
             });
 
-            [# th:if= "${currentSystemStatus != null && (#strings.equals(currentSystemStatus.statusCd, 'GENERICFAIL') || #strings.equals(currentSystemStatus.statusCd, 'HOSTFAIL'))}"]
+            [# th:if= "${currentSystemStatus != null && (#strings.equals(currentSystemStatus.statusCd, 'GENERICFAIL') || #strings.equals(currentSystemStatus.statusCd, 'HOSTFAIL') || #strings.equals(currentSystemStatus.statusCd, 'HOSTKEYFAIL'))}"]
                 new bootstrap.Modal($("#error_dialog")).show();
             [/]
-            [# th:if= "${pendingSystemStatus != null && pendingSystemStatus.id != null && (currentSystemStatus == null || (!#strings.equals(currentSystemStatus.statusCd, 'GENERICFAIL') && !#strings.equals(currentSystemStatus.statusCd, 'HOSTFAIL')) )}"]
+            [# th:if= "${pendingSystemStatus != null && pendingSystemStatus.id != null && (currentSystemStatus == null || (!#strings.equals(currentSystemStatus.statusCd, 'GENERICFAIL') && !#strings.equals(currentSystemStatus.statusCd, 'HOSTFAIL') && !#strings.equals(currentSystemStatus.statusCd, 'HOSTKEYFAIL')) )}"]
                 [# th:if= "${ #strings.equals(pendingSystemStatus.statusCd, 'AUTHFAIL')}"]
                     new bootstrap.Modal($("#set_password_dialog")).show();
                 [/]
@@ -126,7 +126,7 @@
                     new bootstrap.Modal($("#set_passphrase_dialog")).show();
                 [/]
 
-                [# th:if= "${currentSystemStatus == null || (!#strings.equals(pendingSystemStatus.statusCd, 'AUTHFAIL') && !#strings.equals(pendingSystemStatus.statusCd, 'KEYAUTHFAIL')&& !#strings.equals(pendingSystemStatus.statusCd, 'GENERICFAIL'))}"]
+                [# th:if= "${currentSystemStatus == null || (!#strings.equals(pendingSystemStatus.statusCd, 'AUTHFAIL') && !#strings.equals(pendingSystemStatus.statusCd, 'KEYAUTHFAIL')&& !#strings.equals(pendingSystemStatus.statusCd, 'GENERICFAIL') && !#strings.equals(pendingSystemStatus.statusCd, 'HOSTKEYFAIL'))}"]
                     $("#composite_terms_frm").submit();
                 [/]
             [/]

@@ -20,7 +20,11 @@
                 <li class="nav-item"><a th:href="'../admin/menu.html?_csrf=' + ${session._csrf}"
                                         class="nav-link">Home</a>
                 </li>
-                <li class="dropdown nav-item"><a href="#" class="dropdown-toggle nav-link" data-bs-toggle="dropdown">Manage
+                <li class="dropdown nav-item"><a href="#" class="dropdown-toggle nav-link" data-bs-toggle="dropdown">Manage<span
+                        th:if="${blockedHostKeyCount != null and blockedHostKeyCount > 0}"
+                        class="badge text-bg-danger host-key-badge"
+                        th:text="${blockedHostKeyCount}"
+                        th:title="'host key(s) refusing connections'"></span>
                     <b class="caret"></b></a>
                     <ul class="dropdown-menu">
                         <template th:if="${#strings.equals(session.userType,'M')}" th:remove="tag">
@@ -33,7 +37,11 @@
                             <li><a class="dropdown-item" th:href="'../manage/viewUsers.ktrl?_csrf=' + ${session._csrf}">Users</a>
                             </li>
                             <li><a class="dropdown-item"
-                                   th:href="'../manage/viewHostKeys.ktrl?_csrf=' + ${session._csrf}">Host Keys</a>
+                                   th:href="'../manage/viewHostKeys.ktrl?_csrf=' + ${session._csrf}">Host Keys<span
+                                    th:if="${blockedHostKeyCount != null and blockedHostKeyCount > 0}"
+                                    class="badge text-bg-danger host-key-badge"
+                                    th:text="${blockedHostKeyCount}"
+                                    th:title="'host key(s) refusing connections'"></span></a>
                             </li>
                         </template>
                         <template th:if="${@io.bastillion.manage.util.SSHUtil@keyManagementEnabled}"

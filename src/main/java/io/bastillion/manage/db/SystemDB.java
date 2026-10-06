@@ -33,6 +33,7 @@ public class SystemDB {
     public static final String SORT_BY_USER = "username";
     public static final String SORT_BY_HOST = "host";
     public static final String STATUS_CD = "status_cd";
+    public static final String LAST_AUTH_METHOD = "last_auth_method";
     public static final String PROFILE_ID = "profile_id";
     public static final String SORT_BY_STATUS = STATUS_CD;
     /**
@@ -73,14 +74,7 @@ public class SystemDB {
 
             try (ResultSet rs = stmt.executeQuery()) {
                 while (rs.next()) {
-                    HostSystem hostSystem = new HostSystem();
-                    hostSystem.setId(rs.getLong("id"));
-                    hostSystem.setDisplayNm(rs.getString(DISPLAY_NM));
-                    hostSystem.setUser(rs.getString("username"));
-                    hostSystem.setHost(rs.getString("host"));
-                    hostSystem.setPort(rs.getInt("port"));
-                    hostSystem.setAuthorizedKeys(rs.getString(AUTHORIZED_KEYS));
-                    hostSystem.setStatusCd(rs.getString(STATUS_CD));
+                    HostSystem hostSystem = mapSystem(rs);
                     hostSystemList.add(hostSystem);
                 }
             }
@@ -110,14 +104,7 @@ public class SystemDB {
             try (ResultSet rs = stmt.executeQuery()) {
 
                 while (rs.next()) {
-                    HostSystem hostSystem = new HostSystem();
-                    hostSystem.setId(rs.getLong("id"));
-                    hostSystem.setDisplayNm(rs.getString(DISPLAY_NM));
-                    hostSystem.setUser(rs.getString("username"));
-                    hostSystem.setHost(rs.getString("host"));
-                    hostSystem.setPort(rs.getInt("port"));
-                    hostSystem.setAuthorizedKeys(rs.getString(AUTHORIZED_KEYS));
-                    hostSystem.setStatusCd(rs.getString(STATUS_CD));
+                    HostSystem hostSystem = mapSystem(rs);
                     hostSystem.setChecked(profileId != null && profileId.equals(rs.getLong(PROFILE_ID)));
                     hostSystemList.add(hostSystem);
                 }
@@ -151,14 +138,7 @@ public class SystemDB {
             try (ResultSet rs = stmt.executeQuery()) {
 
                 while (rs.next()) {
-                    HostSystem hostSystem = new HostSystem();
-                    hostSystem.setId(rs.getLong("id"));
-                    hostSystem.setDisplayNm(rs.getString(DISPLAY_NM));
-                    hostSystem.setUser(rs.getString("username"));
-                    hostSystem.setHost(rs.getString("host"));
-                    hostSystem.setPort(rs.getInt("port"));
-                    hostSystem.setAuthorizedKeys(rs.getString(AUTHORIZED_KEYS));
-                    hostSystem.setStatusCd(rs.getString(STATUS_CD));
+                    HostSystem hostSystem = mapSystem(rs);
                     hostSystemList.add(hostSystem);
                 }
             }
@@ -199,14 +179,7 @@ public class SystemDB {
             try (ResultSet rs = stmt.executeQuery()) {
 
                 while (rs.next()) {
-                    hostSystem = new HostSystem();
-                    hostSystem.setId(rs.getLong("id"));
-                    hostSystem.setDisplayNm(rs.getString(DISPLAY_NM));
-                    hostSystem.setUser(rs.getString("username"));
-                    hostSystem.setHost(rs.getString("host"));
-                    hostSystem.setPort(rs.getInt("port"));
-                    hostSystem.setAuthorizedKeys(rs.getString(AUTHORIZED_KEYS));
-                    hostSystem.setStatusCd(rs.getString(STATUS_CD));
+                    hostSystem = mapSystem(rs);
                 }
             }
         }
@@ -238,6 +211,46 @@ public class SystemDB {
      * @param hostSystem host system object
      * @return user id
      */
+    /**
+     * Builds a HostSystem from a system row. One copy rather than the five near-identical
+     * blocks this replaced, so a column added to the table is read everywhere by adding one
+     * line here.
+     */
+    private static HostSystem mapSystem(ResultSet rs) throws SQLException {
+        HostSystem hostSystem = new HostSystem();
+        hostSystem.setId(rs.getLong("id"));
+        hostSystem.setDisplayNm(rs.getString(DISPLAY_NM));
+        hostSystem.setUser(rs.getString("username"));
+        hostSystem.setHost(rs.getString("host"));
+        hostSystem.setPort(rs.getInt("port"));
+        hostSystem.setAuthorizedKeys(rs.getString(AUTHORIZED_KEYS));
+        hostSystem.setStatusCd(rs.getString(STATUS_CD));
+        hostSystem.setLastAuthMethod(rs.getString(LAST_AUTH_METHOD));
+        return hostSystem;
+    }
+
+    /**
+     * Records how the last connection to this system authenticated.
+     * <p>
+     * Deliberately its own statement rather than a column on {@link #updateSystem}, which
+     * writes a fixed list straight from the form-bound HostSystem - editing a system in the
+     * UI carries no auth-method field, so folding it in there would wipe the value every time
+     * somebody renamed a host.
+     */
+    public static void updateAuthMethod(Long systemId, String authMethod)
+            throws SQLException, GeneralSecurityException {
+        if (systemId == null) {
+            return;
+        }
+        try (Connection con = DBUtils.getConn();
+             PreparedStatement stmt = con.prepareStatement(
+                     "update system set last_auth_method=? where id=?")) {
+            stmt.setString(1, authMethod);
+            stmt.setLong(2, systemId);
+            stmt.executeUpdate();
+        }
+    }
+
     public static Long insertSystem(HostSystem hostSystem) throws SQLException, GeneralSecurityException {
 
         Long userId = null;
@@ -311,14 +324,7 @@ public class SystemDB {
              ResultSet rs = stmt.executeQuery()) {
 
             while (rs.next()) {
-                HostSystem hostSystem = new HostSystem();
-                hostSystem.setId(rs.getLong("id"));
-                hostSystem.setDisplayNm(rs.getString(DISPLAY_NM));
-                hostSystem.setUser(rs.getString("username"));
-                hostSystem.setHost(rs.getString("host"));
-                hostSystem.setPort(rs.getInt("port"));
-                hostSystem.setAuthorizedKeys(rs.getString(AUTHORIZED_KEYS));
-                hostSystem.setStatusCd(rs.getString(STATUS_CD));
+                HostSystem hostSystem = mapSystem(rs);
                 hostSystemList.add(hostSystem);
             }
         }

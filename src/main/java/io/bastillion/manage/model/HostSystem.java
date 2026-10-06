@@ -21,6 +21,7 @@ public class HostSystem {
     Boolean checked = false;
     String statusCd = INITIAL_STATUS;
     String errorMsg;
+    String lastAuthMethod;
     List<String> publicKeyList;
     Integer instanceId;
 
@@ -30,6 +31,17 @@ public class HostSystem {
     public static final String GENERIC_FAIL_STATUS = "GENERICFAIL";
     public static final String SUCCESS_STATUS = "SUCCESS";
     public static final String HOST_FAIL_STATUS = "HOSTFAIL";
+    /**
+     * The system's SSH host key was refused - unknown, changed, or revoked. Distinct from
+     * GENERICFAIL because it needs a specific human decision on the Host Keys screen, and
+     * because "Failed" on its own is indistinguishable from a dead port or a bad password.
+     */
+    public static final String HOST_KEY_FAIL_STATUS = "HOSTKEYFAIL";
+
+    /** Authenticated with a short-lived SSH certificate Bastillion signed. */
+    public static final String AUTH_METHOD_CERTIFICATE = "CERTIFICATE";
+    /** Authenticated with the application public key, out of the host's authorized_keys. */
+    public static final String AUTH_METHOD_KEY = "KEY";
 
 
     public Long getId() {
@@ -119,6 +131,19 @@ public class HostSystem {
 
     public void setPublicKeyList(List<String> publicKeyList) {
         this.publicKeyList = publicKeyList;
+    }
+
+    /**
+     * How the most recent connection to this system authenticated - see the AUTH_METHOD_*
+     * constants. Null until Bastillion has connected to it since the column was added, which
+     * is why the systems screen renders that as "unknown" rather than "key".
+     */
+    public String getLastAuthMethod() {
+        return lastAuthMethod;
+    }
+
+    public void setLastAuthMethod(String lastAuthMethod) {
+        this.lastAuthMethod = lastAuthMethod;
     }
 
     public Integer getInstanceId() {

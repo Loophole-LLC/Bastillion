@@ -13,6 +13,7 @@ import io.bastillion.manage.db.UserProfileDB;
 import io.bastillion.manage.model.*;
 import io.bastillion.manage.util.LicenseUtil;
 import io.bastillion.manage.util.SSHUtil;
+import io.bastillion.manage.util.SshCertificateAuth;
 import loophole.mvc.annotation.Kontrol;
 import loophole.mvc.annotation.MethodType;
 import loophole.mvc.annotation.Model;
@@ -49,6 +50,12 @@ public class SystemKtrl extends BaseKontroller {
     String passphrase;
     @Model(name = "profileList")
     List<Profile> profileList = new ArrayList<>();
+    @Model(name = "certTestMessage")
+    String certTestMessage;
+    @Model(name = "certTestOk")
+    Boolean certTestOk;
+    @Model(name = "certificateAuthEnabled")
+    Boolean certificateAuthEnabled = SshCertificateAuth.isEnabled();
 
     public SystemKtrl(HttpServletRequest request, HttpServletResponse response) {
         super(request, response);
@@ -126,6 +133,46 @@ public class SystemKtrl extends BaseKontroller {
             retVal = "/manage/view_systems.html";
         }
         return retVal;
+    }
+
+    /**
+     * Tries a certificate-authenticated connection to one system and reports the result.
+     * <p>
+     * {@code sshCertificateAuth} is a single global switch, so without this the way to find out
+     * that a host was never given TrustedUserCAKeys is to turn certificates on for the whole
+     * fleet and watch it fail. POST rather than a link: it opens a real SSH connection.
+     */
+    @Kontrol(path = "/manage/testCertificateAuth", method = MethodType.POST)
+    public String testCertificateAuth() throws ServletException {
+        try {
+            if (hostSystem.getId() == null) {
+                addError("No system selected");
+                return reloadSystems();
+            }
+            HostSystem target = SystemDB.getSystem(hostSystem.getId());
+            if (target == null) {
+                addError("That system no longer exists");
+                return reloadSystems();
+            }
+            SSHUtil.CertificateTestResult result = SSHUtil.testCertificateAuth(
+                    target, AuthUtil.getUsername(getRequest().getSession()));
+            certTestOk = result.ok();
+            certTestMessage = result.message();
+        } catch (SQLException | GeneralSecurityException ex) {
+            log.error(ex.toString(), ex);
+            throw new ServletException(ex.toString(), ex);
+        }
+        return reloadSystems();
+    }
+
+    private String reloadSystems() throws ServletException {
+        try {
+            sortedSet = SystemDB.getSystemSet(sortedSet);
+        } catch (SQLException | GeneralSecurityException ex) {
+            log.error(ex.toString(), ex);
+            throw new ServletException(ex.toString(), ex);
+        }
+        return "/manage/view_systems.html";
     }
 
     @Kontrol(path = "/manage/deleteSystem", method = MethodType.GET)

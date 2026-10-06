@@ -325,8 +325,7 @@ public class SSHUtil {
             c.put(file, destination);
         } catch (Exception ex) {
             log.info(ex.toString(), ex);
-            hostSystem.setErrorMsg(ex.getMessage());
-            hostSystem.setStatusCd(HostSystem.GENERIC_FAIL_STATUS);
+            recordFailure(hostSystem, ex);
         }
         if (c != null) c.exit();
         if (channel != null) channel.disconnect();
@@ -360,7 +359,7 @@ public class SSHUtil {
             if (StringUtils.isBlank(passphrase)) passphrase = appKey.getPassphrase();
             if (passphrase == null) passphrase = "";
 
-            addApplicationIdentity(jsch, appKey, passphrase, hostSystem, usernameFor(userId));
+            String authMethod = addApplicationIdentity(jsch, appKey, passphrase, hostSystem, usernameFor(userId));
 
             Session session = jsch.getSession(hostSystem.getUser(), hostSystem.getHost(), hostSystem.getPort());
             if (StringUtils.isNotBlank(password)) session.setPassword(password.getBytes(StandardCharsets.UTF_8));
@@ -368,6 +367,8 @@ public class SSHUtil {
             session.setConfig("PreferredAuthentications", "publickey,keyboard-interactive,password");
             session.setServerAliveInterval(SERVER_ALIVE_INTERVAL);
             session.connect(SESSION_TIMEOUT);
+
+            recordAuthMethod(hostSystem, authMethod);
 
             ChannelShell channel = (ChannelShell) session.openChannel("shell");
             channel.setPtyType("xterm");
@@ -388,8 +389,7 @@ public class SSHUtil {
             addPubKey(hostSystem, session, appKey.getPublicKey());
         } catch (Exception ex) {
             log.info(ex.toString(), ex);
-            hostSystem.setErrorMsg(ex.getMessage());
-            hostSystem.setStatusCd(HostSystem.GENERIC_FAIL_STATUS);
+            recordFailure(hostSystem, ex);
         }
 
         if (!hostSystem.getStatusCd().equals(HostSystem.SUCCESS_STATUS)) {
@@ -458,8 +458,8 @@ public class SSHUtil {
      * The private key is the same either way - a certificate attests to a key, it does not
      * replace one.
      */
-    private static void addApplicationIdentity(JSch jsch, ApplicationKey appKey, String passphrase,
-                                               HostSystem hostSystem, String username) throws JSchException {
+    private static String addApplicationIdentity(JSch jsch, ApplicationKey appKey, String passphrase,
+                                                 HostSystem hostSystem, String username) throws JSchException {
         String certificate = SshCertificateAuth.certificateFor(hostSystem, username);
         byte[] publicCredential = certificate != null
                 ? certificate.getBytes(StandardCharsets.UTF_8)
@@ -469,6 +469,24 @@ public class SSHUtil {
                 appKey.getPrivateKey().trim().getBytes(),
                 publicCredential,
                 passphrase.getBytes());
+
+        return certificate != null ? HostSystem.AUTH_METHOD_CERTIFICATE : HostSystem.AUTH_METHOD_KEY;
+    }
+
+    /**
+     * Records how a connection that has just succeeded authenticated, for the systems screen.
+     * <p>
+     * Best effort: the session is already up, so failing to note how it got there must not
+     * fail the connection. A system being registered for the first time has no id yet and is
+     * recorded on its next connection instead.
+     */
+    private static void recordAuthMethod(HostSystem hostSystem, String authMethod) {
+        hostSystem.setLastAuthMethod(authMethod);
+        try {
+            SystemDB.updateAuthMethod(hostSystem.getId(), authMethod);
+        } catch (Exception ex) {
+            log.error("Could not record the authentication method for system {}", hostSystem.getId(), ex);
+        }
     }
 
     /**
@@ -497,6 +515,37 @@ public class SSHUtil {
      * this without matching on message text. The cause chain is walked because the connect
      * call wraps it.
      */
+    private static final int MAX_CAUSE_DEPTH = 32;
+
+    private static boolean isHostKeyRejection(Throwable ex) {
+        // Bounded rather than guarded against self-reference: the JVM rejects an exception
+        // that causes itself, but a two-element cycle (a caused by b, b later given a as its
+        // cause) is constructible and would spin a naive walk forever. No real chain is
+        // anywhere near this deep.
+        Throwable t = ex;
+        for (int depth = 0; t != null && depth < MAX_CAUSE_DEPTH; depth++, t = t.getCause()) {
+            if (t instanceof JSchHostKeyException) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Records a failure, singling out a refused host key so the systems list can say what
+     * actually happened and point at the screen that resolves it.
+     */
+    private static void recordFailure(HostSystem hostSystem, Exception ex) {
+        if (isHostKeyRejection(ex)) {
+            hostSystem.setErrorMsg("The host key presented by this system was refused. "
+                    + "Review it under Manage \u2192 Host Keys.");
+            hostSystem.setStatusCd(HostSystem.HOST_KEY_FAIL_STATUS);
+            return;
+        }
+        hostSystem.setErrorMsg(ex.getMessage());
+        hostSystem.setStatusCd(HostSystem.GENERIC_FAIL_STATUS);
+    }
+
     // --- Authentication and Add Key ---
     public static HostSystem authAndAddPubKey(HostSystem hostSystem, String passphrase, String password) {
         JSch jsch = new JSch();
@@ -507,7 +556,7 @@ public class SSHUtil {
             if (StringUtils.isBlank(passphrase)) passphrase = appKey.getPassphrase();
             if (passphrase == null) passphrase = "";
 
-            addApplicationIdentity(jsch, appKey, passphrase, hostSystem, null);
+            String authMethod = addApplicationIdentity(jsch, appKey, passphrase, hostSystem, null);
 
             session = jsch.getSession(hostSystem.getUser(), hostSystem.getHost(), hostSystem.getPort());
             if (password != null && !password.isEmpty()) session.setPassword(password.getBytes(StandardCharsets.UTF_8));
@@ -515,11 +564,17 @@ public class SSHUtil {
             session.setConfig("PreferredAuthentications", "publickey,keyboard-interactive,password");
             session.setServerAliveInterval(SERVER_ALIVE_INTERVAL);
             session.connect(SESSION_TIMEOUT);
+            recordAuthMethod(hostSystem, authMethod);
 
             addPubKey(hostSystem, session, appKey.getPublicKey());
 
         } catch (Exception ex) {
             log.info(ex.toString(), ex);
+            if (isHostKeyRejection(ex)) {
+                recordFailure(hostSystem, ex);
+                if (session != null) session.disconnect();
+                return hostSystem;
+            }
             hostSystem.setErrorMsg(ex.getMessage());
             String msg = ex.getMessage().toLowerCase();
             if (msg.contains("userauth fail")) hostSystem.setStatusCd(HostSystem.PUBLIC_KEY_FAIL_STATUS);
@@ -532,6 +587,96 @@ public class SSHUtil {
         }
         if (session != null) session.disconnect();
         return hostSystem;
+    }
+
+    /**
+     * Outcome of a certificate authentication test.
+     *
+     * @param ok      whether the host accepted a Bastillion-signed certificate
+     * @param message what to tell the operator, in terms of what to do next
+     */
+    public record CertificateTestResult(boolean ok, String message) {
+    }
+
+    /**
+     * Tries to authenticate to one system with a Bastillion-signed certificate and reports
+     * what happened, without changing that system's recorded status.
+     * <p>
+     * Exists because {@code sshCertificateAuth} is a single global switch: without this, the
+     * way to discover that a host was never given {@code TrustedUserCAKeys} is to turn
+     * certificates on everywhere and watch connections fail. This answers the question for one
+     * host first.
+     * <p>
+     * Deliberately issues a certificate regardless of whether the feature is switched on -
+     * testing before enabling is the entire point - and deliberately offers <em>only</em>
+     * publickey authentication. With keyboard-interactive or password left available, a host
+     * that rejected the certificate could still complete the connection by another route and
+     * the test would report success for a host that is not ready.
+     * <p>
+     * Does not touch authorized_keys and does not write the system's status. It is a real
+     * connection, so host key verification applies as usual: under accept-new an unseen host
+     * key is recorded by it, exactly as the first real connection would have.
+     */
+    public static CertificateTestResult testCertificateAuth(HostSystem hostSystem, String username) {
+        JSch jsch = new JSch();
+        Session session = null;
+        try {
+            ApplicationKey appKey = PrivateKeyDB.getApplicationKey();
+            if (appKey == null) {
+                return new CertificateTestResult(false, "No application SSH key has been generated yet.");
+            }
+            String certificate = SshCertificateAuth.issueCertificate(hostSystem, username);
+            if (certificate == null) {
+                return new CertificateTestResult(false,
+                        "Could not issue a certificate. Check that a certificate authority exists "
+                                + "and that this system has a login account set.");
+            }
+
+            String passphrase = appKey.getPassphrase() == null ? "" : appKey.getPassphrase();
+            jsch.addIdentity(appKey.getId().toString(),
+                    appKey.getPrivateKey().trim().getBytes(),
+                    certificate.getBytes(StandardCharsets.UTF_8),
+                    passphrase.getBytes());
+
+            session = jsch.getSession(hostSystem.getUser(), hostSystem.getHost(), hostSystem.getPort());
+            applyHostKeyVerification(jsch, session);
+            session.setConfig("PreferredAuthentications", "publickey");
+            session.connect(SESSION_TIMEOUT);
+
+            return new CertificateTestResult(true,
+                    hostSystem.getUser() + "@" + hostSystem.getHost() + ":" + hostSystem.getPort()
+                            + " accepted a Bastillion-signed certificate. This system is ready for "
+                            + "sshCertificateAuth=on.");
+
+        } catch (Exception ex) {
+            log.info("Certificate test failed for {}:{}", hostSystem.getHost(), hostSystem.getPort(), ex);
+            return new CertificateTestResult(false, explainCertificateTestFailure(ex));
+        } finally {
+            if (session != null) {
+                session.disconnect();
+            }
+        }
+    }
+
+    /**
+     * Turns a failed certificate test into something an operator can act on. The common case
+     * by far is the host never having been told to trust the authority.
+     */
+    private static String explainCertificateTestFailure(Exception ex) {
+        if (isHostKeyRejection(ex)) {
+            return "The host key was refused, so the certificate was never tried. "
+                    + "Resolve it under Manage \u2192 Host Keys and test again.";
+        }
+        String message = ex.getMessage() == null ? "" : ex.getMessage().toLowerCase();
+        if (message.contains("auth fail") || message.contains("auth cancel")) {
+            return "The host refused the certificate. Check that its sshd_config has "
+                    + "TrustedUserCAKeys pointing at this Bastillion's certificate authority key "
+                    + "(Settings shows it), and that sshd has been reloaded since.";
+        }
+        if (message.contains("unknownhost")) {
+            return "DNS lookup failed for this host.";
+        }
+        return "Could not connect: " + (ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage());
     }
 
     // --- Fingerprint helper ---

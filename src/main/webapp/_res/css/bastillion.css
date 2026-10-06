@@ -503,6 +503,15 @@ table.floatThead-table {
     margin-bottom: 22px;
 }
 
+/* Copy / Download sitting together on the right of a settings card header. The header is
+   already flex with space-between, so this only has to keep the pair from colliding. */
+.settings-card-actions {
+    display: inline-flex;
+    gap: 8px;
+    flex-shrink: 0;
+    align-items: flex-start;
+}
+
 .settings-card-header h2 {
     margin: 0 0 6px;
     font-size: 1.2rem;
@@ -2185,3 +2194,12 @@ body > .container.table-page-wide { max-width: 1240px; }
 .assignment-sort-icon::after { bottom: 1px; border-top: 4px solid currentColor; }
 th[aria-sort="ascending"] .assignment-sort-icon::after,
 th[aria-sort="descending"] .assignment-sort-icon::before { visibility: hidden; }
+
+/* Count of host keys currently refusing connections, in the navigation. A blocked host key
+   otherwise only shows up as a failed session, so it needs to be visible without opening the
+   Manage menu. */
+.host-key-badge {
+    margin-left: 0.4em;
+    font-size: 0.7em;
+    vertical-align: text-top;
+}
