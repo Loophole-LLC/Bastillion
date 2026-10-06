@@ -793,8 +793,13 @@ export ENABLE_INTERNAL_AUDIT=false
 ```
 
 Separately, the `io.bastillion.manage.util.SystemAudit` log records host key and SSH
-certificate decisions, and goes to the console by default. To send it to a file instead,
-uncomment `audit-appender` in **log4j2.xml** and point that logger at it:
+certificate decisions, and goes to the console by default.
+
+With `sshCertificateAuth=on` that is **one line per SSH connection** — a certificate is signed
+for each one, and each issue is recorded with its serial and key id. That is the audit trail
+those serials exist for, but it is a volume change worth expecting rather than discovering.
+Route it to a file by uncommenting `audit-appender` in **log4j2.xml** and pointing that logger
+at it:
 
 > https://github.com/Loophole-LLC/Bastillion/blob/main/src/main/resources/log4j2.xml#L19-L22
 </details>

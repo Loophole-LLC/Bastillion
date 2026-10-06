@@ -43,6 +43,32 @@ public class SshCertificateAuth {
             Long.parseLong(AppConfig.getProperty("sshCertificateValiditySeconds", "300"));
 
     /**
+     * Beyond this, the certificate lifetime stops being a usable substitute for revocation.
+     * <p>
+     * Nothing here publishes a key revocation list, so an issued certificate is valid until
+     * it expires no matter what happens in Bastillion afterwards. At the default of 300s that
+     * is barely a distinction - disable an account and their certificates are dead within five
+     * minutes. Stretch it to a working day and "remove this user" quietly stops meaning "cut
+     * off their access", which is the kind of change that should be deliberate.
+     */
+    private static final long VALIDITY_WARN_THRESHOLD_SECONDS = 3600;
+
+    /**
+     * @return a warning about the configured certificate lifetime, or null if it is short
+     * enough to serve as its own revocation
+     */
+    public static String excessiveValidityWarning() {
+        if (!isEnabled() || VALIDITY_SECONDS <= VALIDITY_WARN_THRESHOLD_SECONDS) {
+            return null;
+        }
+        return "sshCertificateValiditySeconds is " + VALIDITY_SECONDS + ". Bastillion issues a "
+                + "certificate per connection and publishes no revocation list, so a certificate "
+                + "stays usable until it expires - disabling a user does not cut off access they "
+                + "have already been issued until then. Keep this short (the default is 300) "
+                + "unless you have another way to revoke.";
+    }
+
+    /**
      * Used when there is no Bastillion user behind the connection - the authorized-key refresh
      * timer, or registering a system.
      */

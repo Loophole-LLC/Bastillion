@@ -302,6 +302,12 @@ public class DBInitServlet extends jakarta.servlet.http.HttpServlet {
                 }
             }
 
+            String validityWarning = SshCertificateAuth.excessiveValidityWarning();
+            if (validityWarning != null) {
+                System.out.println("WARNING: " + validityWarning);
+                log.error(validityWarning);
+            }
+
             //delete ssh keys
             SSHUtil.deletePvtGenSSHKey();
 

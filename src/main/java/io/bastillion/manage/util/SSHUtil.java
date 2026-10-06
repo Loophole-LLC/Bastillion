@@ -46,8 +46,48 @@ public class SSHUtil {
 
     public static final String KEY_PATH = AppConfig.CONFIG_DIR + "keydb";
     public static final String KEY_TYPE = AppConfig.getProperty("sshKeyType");
-    public static final int KEY_LENGTH = StringUtils.isNumeric(AppConfig.getProperty("sshKeyLength"))
-            ? Integer.parseInt(AppConfig.getProperty("sshKeyLength")) : 4096;
+    public static final int KEY_LENGTH = resolveKeyLength(KEY_TYPE, AppConfig.getProperty("sshKeyLength"));
+
+    /** Documented default for rsa when sshKeyLength does not give a usable one. */
+    static final int RSA_DEFAULT_LENGTH = 4096;
+    /** The only curve sizes ecdsa accepts. */
+    private static final Set<Integer> ECDSA_CURVE_SIZES = Set.of(256, 384, 521);
+
+    /**
+     * The key size to generate, given the configured type and length.
+     * <p>
+     * sshKeyLength ships as 256, which is a curve size for ecdsa and ignored by
+     * ed25519/ed448 - but it is not a usable RSA modulus, so sshKeyType=rsa on its own used to
+     * fail key generation outright and take the application down with it on first startup.
+     * Both the bundled config and the README already describe rsa as defaulting to 4096, so a
+     * length that cannot work for the chosen type falls back to the documented default for it
+     * rather than being passed through to fail. Substitutions are logged: quietly generating a
+     * key of a different size than asked for would be worse than the original crash.
+     */
+    static int resolveKeyLength(String keyType, String configuredLength) {
+        Integer requested = StringUtils.isNumeric(configuredLength)
+                ? Integer.valueOf(Integer.parseInt(configuredLength)) : null;
+        String type = StringUtils.trimToEmpty(keyType).toLowerCase();
+
+        if ("rsa".equals(type)) {
+            if (requested != null && requested >= 1024) {
+                return requested;
+            }
+            log.error("sshKeyLength={} cannot be used for an RSA key; generating {} bits instead. "
+                    + "Set sshKeyLength explicitly to choose.", configuredLength, RSA_DEFAULT_LENGTH);
+            return RSA_DEFAULT_LENGTH;
+        }
+        if ("ecdsa".equals(type)) {
+            if (requested != null && ECDSA_CURVE_SIZES.contains(requested)) {
+                return requested;
+            }
+            log.error("sshKeyLength={} is not an ECDSA curve size ({}); generating 256 instead.",
+                    configuredLength, ECDSA_CURVE_SIZES);
+            return 256;
+        }
+        // ed25519 and ed448 have one size each and ignore this value.
+        return requested != null ? requested : RSA_DEFAULT_LENGTH;
+    }
 
     public static final String DEFAULT_USER_KEY_TYPE = AppConfig.getProperty("defaultUserKeyType", "ed25519");
     public static final boolean ALLOW_USER_KEY_TYPE_SELECTION =
