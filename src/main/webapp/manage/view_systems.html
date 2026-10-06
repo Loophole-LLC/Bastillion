@@ -170,9 +170,11 @@
                     </td>
                     <td>
                         <span th:if="${#strings.equals(s.lastAuthMethod, 'CERTIFICATE')}" class="success"
-                              title="Bastillion presented a certificate on the last connection. Use Test cert to confirm the host accepts one.">certificate</span>
+                              title="The host accepted a Bastillion-signed certificate on the last connection">certificate</span>
                         <span th:if="${#strings.equals(s.lastAuthMethod, 'KEY')}"
-                              title="Last connected using the application key from this host's authorized_keys">key</span>
+                              title="The host accepted the application key from its authorized_keys">key</span>
+                        <span th:if="${#strings.equals(s.lastAuthMethod, 'PASSWORD')}" class="warning"
+                              title="The host accepted a password, not the certificate or key offered first">password</span>
                         <span th:if="${s.lastAuthMethod == null}" class="warning"
                               title="Not connected since this was recorded">&ndash;</span>
                     </td>

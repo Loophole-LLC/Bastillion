@@ -8,6 +8,7 @@ package io.bastillion.manage.util;
 import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.JSchException;
 import com.jcraft.jsch.KeyPair;
+import io.bastillion.manage.model.HostSystem;
 import io.bastillion.manage.model.SchSession;
 import io.bastillion.manage.model.UserSchSessions;
 import org.junit.jupiter.api.Test;
@@ -15,8 +16,10 @@ import org.junit.jupiter.api.Test;
 import java.io.ByteArrayOutputStream;
 import java.security.GeneralSecurityException;
 import java.security.KeyPairGenerator;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -28,6 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
@@ -238,6 +242,75 @@ class SSHUtilTest {
         keyPair.writePublicKey(pubOut, "test@bastillion");
         keyPair.dispose();
         return pubOut.toString();
+    }
+
+    // --- AcceptedAuthMethodLogger / authMethodFor: the systems screen's Auth column has to
+    // say what the host accepted, not what Bastillion offered. JSch exposes no accessor for
+    // it, so the method is read back out of its own log line ---
+
+    @Test
+    void acceptedAuthMethodLoggerReadsTheMethodOutOfJschsSuccessLine() {
+        SSHUtil.AcceptedAuthMethodLogger logger = new SSHUtil.AcceptedAuthMethodLogger(null);
+        logger.log(com.jcraft.jsch.Logger.INFO, "Authentication succeeded (publickey).");
+        assertEquals("publickey", logger.accepted());
+    }
+
+    @Test
+    void acceptedAuthMethodLoggerKeepsTheLastMethodWhenEarlierOnesFailed() {
+        SSHUtil.AcceptedAuthMethodLogger logger = new SSHUtil.AcceptedAuthMethodLogger(null);
+        logger.log(com.jcraft.jsch.Logger.INFO, "Next authentication method: keyboard-interactive");
+        logger.log(com.jcraft.jsch.Logger.INFO, "Authentication succeeded (password).");
+        assertEquals("password", logger.accepted());
+    }
+
+    @Test
+    void acceptedAuthMethodLoggerReportsNothingWhenNoMethodEverSucceeded() {
+        SSHUtil.AcceptedAuthMethodLogger logger = new SSHUtil.AcceptedAuthMethodLogger(null);
+        logger.log(com.jcraft.jsch.Logger.INFO, "Disconnecting from localhost port 22");
+        assertNull(logger.accepted());
+    }
+
+    @Test
+    void acceptedAuthMethodLoggerEnablesInfoSoJschBuildsTheMessageAtAll() {
+        // JSch guards the success line with isEnabled(INFO) - reporting info as disabled
+        // would mean the line is never constructed and the method never seen.
+        assertTrue(new SSHUtil.AcceptedAuthMethodLogger(null).isEnabled(com.jcraft.jsch.Logger.INFO));
+    }
+
+    @Test
+    void acceptedAuthMethodLoggerPassesEverythingOnToTheLoggerItReplaced() {
+        List<String> delegated = new ArrayList<>();
+        com.jcraft.jsch.Logger delegate = new com.jcraft.jsch.Logger() {
+            public boolean isEnabled(int level) { return true; }
+            public void log(int level, String message) { delegated.add(message); }
+        };
+        SSHUtil.AcceptedAuthMethodLogger logger = new SSHUtil.AcceptedAuthMethodLogger(delegate);
+        logger.log(com.jcraft.jsch.Logger.INFO, "Authentication succeeded (publickey).");
+        logger.log(com.jcraft.jsch.Logger.WARN, "something else");
+        assertEquals(List.of("Authentication succeeded (publickey).", "something else"), delegated);
+    }
+
+    @Test
+    void authMethodForAttributesPublickeyToWhicheverCredentialWasAttached() {
+        assertEquals(HostSystem.AUTH_METHOD_CERTIFICATE,
+                SSHUtil.authMethodFor(HostSystem.AUTH_METHOD_CERTIFICATE, "publickey"));
+        assertEquals(HostSystem.AUTH_METHOD_KEY,
+                SSHUtil.authMethodFor(HostSystem.AUTH_METHOD_KEY, "publickey"));
+    }
+
+    @Test
+    void authMethodForDoesNotCreditTheCertificateWhenTheHostTookAPasswordInstead() {
+        assertEquals(HostSystem.AUTH_METHOD_PASSWORD,
+                SSHUtil.authMethodFor(HostSystem.AUTH_METHOD_CERTIFICATE, "password"));
+        assertEquals(HostSystem.AUTH_METHOD_PASSWORD,
+                SSHUtil.authMethodFor(HostSystem.AUTH_METHOD_CERTIFICATE, "keyboard-interactive"));
+    }
+
+    @Test
+    void authMethodForLeavesAnUnrecognizedOrMissingMethodUnknown() {
+        assertNull(SSHUtil.authMethodFor(HostSystem.AUTH_METHOD_CERTIFICATE, null));
+        assertNull(SSHUtil.authMethodFor(HostSystem.AUTH_METHOD_CERTIFICATE, "gssapi-with-mic"));
+        assertNull(SSHUtil.authMethodFor(HostSystem.AUTH_METHOD_CERTIFICATE, "none"));
     }
 
     // --- appendKeyLine: keyManagement=append shares authorized_keys with whatever else

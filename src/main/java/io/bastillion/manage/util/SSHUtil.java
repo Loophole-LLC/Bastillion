@@ -474,16 +474,18 @@ public class SSHUtil {
             if (StringUtils.isBlank(passphrase)) passphrase = appKey.getPassphrase();
             if (passphrase == null) passphrase = "";
 
-            String authMethod = addApplicationIdentity(jsch, appKey, passphrase, hostSystem, usernameFor(userId));
+            String publicKeyCredential = addApplicationIdentity(jsch, appKey, passphrase, hostSystem, usernameFor(userId));
 
             Session session = jsch.getSession(hostSystem.getUser(), hostSystem.getHost(), hostSystem.getPort());
             if (StringUtils.isNotBlank(password)) session.setPassword(password.getBytes(StandardCharsets.UTF_8));
             applyHostKeyVerification(jsch, session);
             session.setConfig("PreferredAuthentications", "publickey,keyboard-interactive,password");
             session.setServerAliveInterval(SERVER_ALIVE_INTERVAL);
+            AcceptedAuthMethodLogger authMethodLogger = new AcceptedAuthMethodLogger(session.getLogger());
+            session.setLogger(authMethodLogger);
             session.connect(SESSION_TIMEOUT);
 
-            recordAuthMethod(hostSystem, authMethod);
+            recordAuthMethod(hostSystem, authMethodFor(publicKeyCredential, authMethodLogger.accepted()));
 
             ChannelShell channel = (ChannelShell) session.openChannel("shell");
             channel.setPtyType("xterm");
@@ -589,6 +591,88 @@ public class SSHUtil {
     }
 
     /**
+     * Captures the authentication method a session actually completed, by listening to JSch's
+     * own log.
+     * <p>
+     * JSch exposes no accessor for this, and it is not something Bastillion can infer: the
+     * method it offers first is not necessarily the one the host accepts, because
+     * PreferredAuthentications also offers keyboard-interactive and password behind
+     * publickey. Recording what was offered made the systems screen's Auth column misleading
+     * in the one situation an operator consults it - a certificate rollout, where the
+     * question is precisely whether the host took the certificate or quietly fell back.
+     * <p>
+     * JSch logs {@code "Authentication succeeded (<method>)."} at info once the method
+     * completes, so that line is the answer. Everything else is passed through to whatever
+     * logger was already in place, so attaching this costs no logging.
+     */
+    static final class AcceptedAuthMethodLogger implements com.jcraft.jsch.Logger {
+
+        private static final String PREFIX = "Authentication succeeded (";
+        private static final String SUFFIX = ").";
+
+        private final com.jcraft.jsch.Logger delegate;
+        private volatile String accepted;
+
+        AcceptedAuthMethodLogger(com.jcraft.jsch.Logger delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public boolean isEnabled(int level) {
+            // Info has to read as enabled whatever the delegate thinks, or JSch skips
+            // building the message this class exists to read.
+            return level == INFO || (delegate != null && delegate.isEnabled(level));
+        }
+
+        @Override
+        public void log(int level, String message) {
+            capture(level, message);
+            if (delegate != null && delegate.isEnabled(level)) {
+                delegate.log(level, message);
+            }
+        }
+
+        @Override
+        public void log(int level, String message, Throwable cause) {
+            capture(level, message);
+            if (delegate != null && delegate.isEnabled(level)) {
+                delegate.log(level, message, cause);
+            }
+        }
+
+        private void capture(int level, String message) {
+            if (level == INFO && message != null && message.startsWith(PREFIX) && message.endsWith(SUFFIX)) {
+                accepted = message.substring(PREFIX.length(), message.length() - SUFFIX.length());
+            }
+        }
+
+        /** The method JSch completed, or null if it never logged one. */
+        String accepted() {
+            return accepted;
+        }
+    }
+
+    /**
+     * Resolves what to record in a system's Auth column from the public key credential
+     * Bastillion attached and the method JSch reports the host accepted.
+     * <p>
+     * The credential only decides the answer once publickey is known to be the method that
+     * succeeded - a host that rejected the certificate and took a password must not be
+     * recorded as having taken the certificate. An unrecognized or missing method is left
+     * null rather than guessed at, which the systems screen renders as unknown.
+     */
+    static String authMethodFor(String publicKeyCredential, String acceptedMethod) {
+        if (acceptedMethod == null) {
+            return null;
+        }
+        return switch (acceptedMethod) {
+            case "publickey" -> publicKeyCredential;
+            case "password", "keyboard-interactive" -> HostSystem.AUTH_METHOD_PASSWORD;
+            default -> null;
+        };
+    }
+
+    /**
      * Records how a connection that has just succeeded authenticated, for the systems screen.
      * <p>
      * Best effort: the session is already up, so failing to note how it got there must not
@@ -671,15 +755,17 @@ public class SSHUtil {
             if (StringUtils.isBlank(passphrase)) passphrase = appKey.getPassphrase();
             if (passphrase == null) passphrase = "";
 
-            String authMethod = addApplicationIdentity(jsch, appKey, passphrase, hostSystem, null);
+            String publicKeyCredential = addApplicationIdentity(jsch, appKey, passphrase, hostSystem, null);
 
             session = jsch.getSession(hostSystem.getUser(), hostSystem.getHost(), hostSystem.getPort());
             if (password != null && !password.isEmpty()) session.setPassword(password.getBytes(StandardCharsets.UTF_8));
             applyHostKeyVerification(jsch, session);
             session.setConfig("PreferredAuthentications", "publickey,keyboard-interactive,password");
             session.setServerAliveInterval(SERVER_ALIVE_INTERVAL);
+            AcceptedAuthMethodLogger authMethodLogger = new AcceptedAuthMethodLogger(session.getLogger());
+            session.setLogger(authMethodLogger);
             session.connect(SESSION_TIMEOUT);
-            recordAuthMethod(hostSystem, authMethod);
+            recordAuthMethod(hostSystem, authMethodFor(publicKeyCredential, authMethodLogger.accepted()));
 
             addPubKey(hostSystem, session, appKey.getPublicKey());
 

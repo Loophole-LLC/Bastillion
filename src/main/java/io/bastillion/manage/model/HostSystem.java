@@ -38,18 +38,17 @@ public class HostSystem {
      */
     public static final String HOST_KEY_FAIL_STATUS = "HOSTKEYFAIL";
 
-    /**
-     * Bastillion presented a short-lived certificate it signed.
-     * <p>
-     * What it presented, not what the host accepted: PreferredAuthentications still offers
-     * keyboard-interactive and password after publickey, so a host that rejects the
-     * certificate can still complete the connection another way. Treat this column as "what
-     * was offered" when reading a rollout - the per-system certificate test is what answers
-     * "did this host accept it".
-     */
+    /** The host accepted a short-lived certificate Bastillion signed. */
     public static final String AUTH_METHOD_CERTIFICATE = "CERTIFICATE";
-    /** Bastillion presented the application public key, for the host's authorized_keys. */
+    /** The host accepted the application public key from its authorized_keys. */
     public static final String AUTH_METHOD_KEY = "KEY";
+    /**
+     * The host accepted a password (or keyboard-interactive), having not accepted the
+     * certificate or key Bastillion offered first. Worth surfacing rather than folding into
+     * the other two: it is what a certificate rollout that has not actually taken effect on
+     * a host looks like.
+     */
+    public static final String AUTH_METHOD_PASSWORD = "PASSWORD";
 
 
     public Long getId() {
@@ -143,8 +142,10 @@ public class HostSystem {
 
     /**
      * How the most recent connection to this system authenticated - see the AUTH_METHOD_*
-     * constants. Null until Bastillion has connected to it since the column was added, which
-     * is why the systems screen renders that as "unknown" rather than "key".
+     * constants. What the host accepted, read back from JSch rather than assumed from what
+     * was offered (see SSHUtil.AcceptedAuthMethodLogger). Null until Bastillion has connected
+     * since the column was added, and also if JSch reported a method that is none of the
+     * above, which the systems screen renders as "unknown" rather than guessing at.
      */
     public String getLastAuthMethod() {
         return lastAuthMethod;
