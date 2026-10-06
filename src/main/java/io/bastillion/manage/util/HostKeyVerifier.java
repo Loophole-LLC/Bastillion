@@ -19,6 +19,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.sql.SQLException;
 import java.util.List;
 
 /**
@@ -116,6 +117,23 @@ public class HostKeyVerifier implements HostKeyRepository {
             if (known == null) {
                 return recordFirstSighting(address, offeredType, offeredKey, offeredFingerprint);
             }
+            return evaluate(known, address, hostPort, offeredType, offeredKey, offeredFingerprint);
+
+        } catch (Exception ex) {
+            // Fail closed. An unreadable key store is not a reason to accept an unverified
+            // host key on a machine whose job is gating access to other machines.
+            log.error("Refusing {}: host key could not be verified", hostPort, ex);
+            return NOT_INCLUDED;
+        }
+    }
+
+    /**
+     * Decides what to do about a host key that already has a record.
+     */
+    private int evaluate(KnownHostKey known, HostAddress address, String hostPort,
+                         String offeredType, String offeredKey, String offeredFingerprint)
+            throws Exception {
+        {
             if (KnownHostKey.REVOKED.equals(known.getStatus())) {
                 log.error("Refusing {}: its {} host key ({}) has been revoked",
                         hostPort, offeredType, offeredFingerprint);
@@ -138,12 +156,6 @@ public class HostKeyVerifier implements HostKeyRepository {
                 return NOT_INCLUDED;
             }
             return OK;
-
-        } catch (Exception ex) {
-            // Fail closed. An unreadable key store is not a reason to accept an unverified
-            // host key on a machine whose job is gating access to other machines.
-            log.error("Refusing {}: host key could not be verified", hostPort, ex);
-            return NOT_INCLUDED;
         }
     }
 
@@ -154,7 +166,22 @@ public class HostKeyVerifier implements HostKeyRepository {
     private int recordFirstSighting(HostAddress address, String type, String key, String fingerprint)
             throws Exception {
         String status = isStrict() ? KnownHostKey.PENDING : KnownHostKey.TRUSTED;
-        HostKeyDB.insertHostKey(address.host(), address.port(), type, key, fingerprint, status);
+        try {
+            HostKeyDB.insertHostKey(address.host(), address.port(), type, key, fingerprint, status);
+        } catch (SQLException ex) {
+            // host_key is unique on (host, port, type), so a second connection opened at the
+            // same time to the same unseen host loses this insert. That is not a verification
+            // failure - without this it fell through to check()'s catch-all and refused a
+            // connection whose key was perfectly good, reporting "could not be verified".
+            KnownHostKey raced = HostKeyDB.getHostKey(address.host(), address.port(), type);
+            if (raced == null) {
+                throw ex;
+            }
+            log.debug("Another connection recorded the {} host key for {}:{} first",
+                    type, address.host(), address.port());
+            return evaluate(raced, address, address.host() + ":" + address.port(),
+                    type, key, fingerprint);
+        }
         if (isStrict()) {
             log.error("Refusing {}:{}: its {} host key ({}) has not been seen before and needs a "
                             + "manager's approval on the Host Keys screen",

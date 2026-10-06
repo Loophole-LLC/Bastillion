@@ -114,9 +114,15 @@ public class SSHUtil {
     private static final Pattern SAFE_AUTHORIZED_KEYS_PATH = Pattern.compile("[A-Za-z0-9_./-]+");
 
     // A CR or LF inside a single key line would split it into two authorized_keys entries,
-    // letting a crafted key comment append an entry of its own (with its own options, e.g.
-    // command= or from=). The shell metacharacters are rejected as defense-in-depth.
-    private static final Pattern UNSAFE_KEY_CHARS = Pattern.compile("['\"`$;|&\\r]");
+    // letting a crafted key comment append an entry of its own with its own options (command=,
+    // from=). That is the whole risk now: the file is written over SFTP, so no shell ever sees
+    // these bytes.
+    //
+    // This deliberately no longer rejects shell metacharacters. It used to, from when each key
+    // was interpolated into echo '...', and the cost was silent: an apostrophe is ordinary in a
+    // key comment ("alice's laptop"), and such a key was dropped from authorized_keys with only
+    // a line in the server log - the user simply found they had no access.
+    private static final Pattern UNSAFE_KEY_CHARS = Pattern.compile("[\\r\\n]");
 
     // package-private (rather than private) so SSHUtilTest can exercise the guards directly
     static boolean isSafeAuthorizedKeysPath(String path) {
@@ -340,15 +346,45 @@ public class SSHUtil {
     }
 
     /**
-     * Replaces the remote authorized_keys file over SFTP and sets it back to 0600.
+     * Suffix for the file the new authorized_keys is staged in. Beside the real one, so the
+     * rename below stays within a single filesystem and can be atomic.
+     */
+    private static final String AUTHORIZED_KEYS_TMP_SUFFIX = ".bastillion-new";
+
+    /**
+     * Replaces the remote authorized_keys file over SFTP, via a staged write and a rename.
+     * <p>
+     * Writing straight over it would truncate first and stream after, so a connection lost
+     * part way leaves a half-written or empty file - and in keyManagement=manage that file is
+     * rewritten on every host by the refresh timer, unattended, every authKeysRefreshInterval
+     * minutes. Losing it takes the application key with it, which locks Bastillion and every
+     * user out of that host until somebody fixes it by hand. Staging and renaming means the
+     * host has either the old file or the new one.
      */
     private static void writeAuthorizedKeys(Session session, String authorizedKeys, String contents) throws JSchException, SftpException {
         ChannelSftp sftp = (ChannelSftp) session.openChannel("sftp");
+        String staged = authorizedKeys + AUTHORIZED_KEYS_TMP_SUFFIX;
         try {
             sftp.connect(CHANNEL_TIMEOUT);
-            sftp.put(new ByteArrayInputStream(contents.getBytes(StandardCharsets.UTF_8)), authorizedKeys);
-            sftp.chmod(0600, authorizedKeys);
+            sftp.put(new ByteArrayInputStream(contents.getBytes(StandardCharsets.UTF_8)), staged);
+            sftp.chmod(0600, staged);
+            try {
+                sftp.rename(staged, authorizedKeys);
+            } catch (SftpException ex) {
+                // SFTP version 3 leaves renaming onto an existing path undefined and servers
+                // without the posix-rename@openssh.com extension refuse it. Removing first
+                // reopens a window where the file is missing, but a far narrower one than
+                // streaming the whole file over the top of it.
+                log.info("Atomic rename of {} not available, falling back to replace", authorizedKeys);
+                sftp.rm(authorizedKeys);
+                sftp.rename(staged, authorizedKeys);
+            }
         } finally {
+            try {
+                sftp.rm(staged);
+            } catch (Exception ignored) {
+                // Already renamed away in the normal case; nothing to clean up.
+            }
             sftp.disconnect();
         }
     }
