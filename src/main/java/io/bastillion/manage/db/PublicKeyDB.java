@@ -252,6 +252,39 @@ public class PublicKeyDB {
      * @param publicKeyId key id
      * @return script object
      */
+    /**
+     * The given user's own public key, or null if that key is not theirs.
+     * <p>
+     * Ownership is a condition of the query rather than a field compared afterwards, because
+     * {@link #getPublicKey(Connection, Long)} does not populate userId at all - so a caller
+     * that fetched a key and compared getUserId() would be comparing against null every time,
+     * and would have to get the direction of that test exactly right to fail safe. Scoping it
+     * here means a key that is not the user's simply is not returned.
+     */
+    public static PublicKey getPublicKeyForUser(Long publicKeyId, Long userId)
+            throws SQLException, GeneralSecurityException {
+        try (Connection con = DBUtils.getConn();
+             PreparedStatement stmt = con.prepareStatement(
+                     "select * from public_keys where id=? and user_id=?")) {
+            stmt.setLong(1, publicKeyId);
+            stmt.setLong(2, userId);
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (!rs.next()) {
+                    return null;
+                }
+                PublicKey publicKey = new PublicKey();
+                publicKey.setId(rs.getLong("id"));
+                publicKey.setKeyNm(rs.getString(KEY_NM));
+                publicKey.setPublicKey(rs.getString(PUBLIC_KEY));
+                publicKey.setType(rs.getString("type"));
+                publicKey.setFingerprint(rs.getString("fingerprint"));
+                publicKey.setCreateDt(rs.getTimestamp(CREATE_DT));
+                publicKey.setUserId(rs.getLong("user_id"));
+                return publicKey;
+            }
+        }
+    }
+
     public static PublicKey getPublicKey(Connection con, Long publicKeyId) throws SQLException {
 
         PublicKey publicKey = null;

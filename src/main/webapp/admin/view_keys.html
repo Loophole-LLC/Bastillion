@@ -121,6 +121,7 @@
 <body>
 <div th:replace="~{_res/inc/navigation}"></div>
 <div class="container table-page table-page-wide">
+    <div th:replace="~{_res/inc/errors}"></div>
     <form id="viewKeys" th:action="@{/admin/viewKeys.ktrl}" method="get">
         <input type="hidden" name="_csrf" th:value="${session._csrf}">
         <input type="hidden" id="viewKeys_sortedSet_orderByDirection" name="sortedSet.orderByDirection"

@@ -228,8 +228,10 @@ public class AuthKeysKtrl extends BaseKontroller {
                 getResponse().sendError(HttpServletResponse.SC_BAD_REQUEST);
                 return null;
             }
-            PublicKey stored = PublicKeyDB.getPublicKey(publicKey.getId());
-            if (stored == null || stored.getUserId() == null || !stored.getUserId().equals(userId)) {
+            // Scoped to this user in the query - see PublicKeyDB.getPublicKeyForUser for why
+            // fetching by id and comparing getUserId() afterwards does not work.
+            PublicKey stored = PublicKeyDB.getPublicKeyForUser(publicKey.getId(), userId);
+            if (stored == null) {
                 getResponse().sendError(HttpServletResponse.SC_FORBIDDEN);
                 return null;
             }
