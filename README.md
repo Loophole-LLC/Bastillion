@@ -523,8 +523,33 @@ Two things worth being clear about, because it is easy to credit them to certifi
 - **`off` does not stop direct SSH.** Keys already on a host, however they got there, keep
   working. It stops Bastillion *maintaining* the file.
 
-Certificates for users' *own* SSH clients are not implemented — only Bastillion's sessions
-use them.
+**Users can download a certificate for their own SSH client** from **Manage SSH Keys**, next
+to each of their keys, once this is on. It is signed for that key, carries the login accounts
+their profiles currently reach, and lets them `ssh` to a host directly with nothing in its
+`authorized_keys`. It downloads as `<key name>.key-cert.pub`, which is what OpenSSH looks for
+beside the `<key name>.key` private key from the same screen — keep both names as given and
+`ssh -i <key name>.key` picks the certificate up on its own.
+
+```bash
+export SSH_USER_CERTIFICATE_VALIDITY_SECONDS=28800   # 8 hours
+```
+
+The default is one working session, which is deliberate. The principals are read **at issue
+time**, so re-downloading is what re-checks the user's entitlements — that is the only thing
+making expiry stand in for revocation, since nothing here publishes a revocation list.
+Bastillion warns at startup above 12 hours. Two consequences worth stating plainly:
+
+- Revoking a user's profile **no longer takes effect immediately** for a certificate they
+  already hold; it takes effect when that certificate expires.
+- Those sessions reach the host directly, so they are **not** in Bastillion's session audit.
+  The host's own log records them, with the certificate's key id.
+
+⚠️ **A certificate principal is a username, with no host in it.** A certificate naming
+`deploy` is accepted as `deploy@` on *every* host trusting this authority, not only the ones
+in that user's profiles. Where hosts share login account names and profiles are what separate
+them, that is wider access than the profile grants. To keep per-host scoping, give each host
+an `AuthorizedPrincipalsFile` listing which principals it accepts — at the cost of per-host
+configuration, which is the thing certificates were adopted to avoid.
 
 What it buys, beyond not distributing keys: Bastillion authenticates to every system with
 one shared application key, so a host's own logs cannot tell which Bastillion user was

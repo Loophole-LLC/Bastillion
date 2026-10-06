@@ -11,9 +11,11 @@ import io.bastillion.manage.db.PrivateKeyDB;
 import io.bastillion.manage.model.ApplicationKey;
 import io.bastillion.manage.model.CertAuthority;
 import io.bastillion.manage.model.HostSystem;
+import io.bastillion.manage.model.SortedSet;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 
+import java.security.GeneralSecurityException;
 import java.util.Base64;
 import java.util.List;
 
@@ -22,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mockStatic;
@@ -220,6 +223,78 @@ class SshCertificateAuthTest {
         out.write(new byte[]{0, 0, 0, (byte) body.length});
         out.write(body);
         return out.toByteArray();
+    }
+
+    // --- certificates a user downloads for their own SSH client ---
+
+    @Test
+    void aUserCertificateCertifiesTheirOwnKeyAndNamesTheAccountsTheyCanReach() throws Exception {
+        Fixture f = fixture();
+        java.security.KeyPair userKp = newKeyPair();
+        String userKey = publicKey(userKp, "alice@laptop");
+
+        SortedSet systems = new SortedSet();
+        systems.setItemList(java.util.List.of(system("deploy"), system("www"), system("deploy")));
+
+        try (MockedStatic<CertAuthorityDB> caDb = mockStatic(CertAuthorityDB.class);
+             MockedStatic<io.bastillion.manage.db.SystemDB> sysDb =
+                     mockStatic(io.bastillion.manage.db.SystemDB.class)) {
+            caDb.when(() -> CertAuthorityDB.getCertAuthority(CertAuthority.USER_CA)).thenReturn(f.ca());
+            caDb.when(() -> CertAuthorityDB.nextSerial(anyString())).thenReturn(5L);
+            sysDb.when(() -> io.bastillion.manage.db.SystemDB.getUserSystemSet(
+                    org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(3L)))
+                    .thenReturn(systems);
+
+            String certificate = SshCertificateAuth.userCertificateFor(userKey, 3L, "alice");
+
+            assertEquals("bastillion:alice", SshCertificateUtil.readKeyId(certificate));
+            // the accounts they can reach, de-duplicated and read at issue time
+            assertEquals(java.util.List.of("deploy", "www"),
+                    SshCertificateUtil.readPrincipals(certificate));
+            // certifies the user's key, not the application's
+            assertArrayEquals(
+                    SshCertificateUtil.rawEd25519Key(SshCertificateUtil.publicKeyBlob(userKey, "u"), "u"),
+                    SshCertificateUtil.readCertifiedPublicKey(certificate));
+        }
+    }
+
+    @Test
+    void refusesAUserCertificateWhenTheyCanReachNothing() throws Exception {
+        // No systems means no principals, and a certificate with none means "any user".
+        Fixture f = fixture();
+        String userKey = publicKey(newKeyPair(), "alice@laptop");
+        SortedSet empty = new SortedSet();
+
+        try (MockedStatic<CertAuthorityDB> caDb = mockStatic(CertAuthorityDB.class);
+             MockedStatic<io.bastillion.manage.db.SystemDB> sysDb =
+                     mockStatic(io.bastillion.manage.db.SystemDB.class)) {
+            caDb.when(() -> CertAuthorityDB.getCertAuthority(CertAuthority.USER_CA)).thenReturn(f.ca());
+            sysDb.when(() -> io.bastillion.manage.db.SystemDB.getUserSystemSet(
+                    org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(3L)))
+                    .thenReturn(empty);
+
+            GeneralSecurityException ex = assertThrows(GeneralSecurityException.class,
+                    () -> SshCertificateAuth.userCertificateFor(userKey, 3L, "alice"));
+            assertTrue(ex.getMessage().contains("no systems assigned"), ex.getMessage());
+        }
+    }
+
+    @Test
+    void refusesAUserCertificateWithNoAuthority() throws Exception {
+        String userKey = publicKey(newKeyPair(), "alice@laptop");
+        try (MockedStatic<CertAuthorityDB> caDb = mockStatic(CertAuthorityDB.class)) {
+            caDb.when(() -> CertAuthorityDB.getCertAuthority(CertAuthority.USER_CA)).thenReturn(null);
+
+            assertThrows(GeneralSecurityException.class,
+                    () -> SshCertificateAuth.userCertificateFor(userKey, 3L, "alice"));
+        }
+    }
+
+    @Test
+    void userCertificateLifetimeIsAWorkingSessionByDefault() {
+        // Long enough to be worth downloading, short enough that re-downloading is the
+        // re-authorization check. Only warns past a working day.
+        assertNull(SshCertificateAuth.excessiveUserValidityWarning());
     }
 
     @Test

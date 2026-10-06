@@ -16,6 +16,7 @@ import io.bastillion.manage.util.EncryptionUtil;
 import io.bastillion.manage.util.PasswordUtil;
 import io.bastillion.manage.util.RefreshAuthKeyUtil;
 import io.bastillion.manage.util.SSHUtil;
+import io.bastillion.manage.util.SshCertificateAuth;
 import loophole.mvc.annotation.Kontrol;
 import loophole.mvc.annotation.MethodType;
 import loophole.mvc.annotation.Model;
@@ -28,6 +29,7 @@ import org.slf4j.LoggerFactory;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import java.nio.charset.StandardCharsets;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -75,6 +77,13 @@ public class AuthKeysKtrl extends BaseKontroller {
 
     @Model(name = "existingKeyId")
     Long existingKeyId;
+
+    /**
+     * Whether to offer a downloadable certificate per key - meaningless unless the hosts have
+     * been told to trust the authority, which is what sshCertificateAuth being on implies.
+     */
+    @Model(name = "certificateAuthEnabled")
+    Boolean certificateAuthEnabled = SshCertificateAuth.isEnabled();
 
     public AuthKeysKtrl(HttpServletRequest request, HttpServletResponse response) {
         super(request, response);
@@ -200,6 +209,62 @@ public class AuthKeysKtrl extends BaseKontroller {
         }
 
         return null;
+    }
+
+    /**
+     * Signs a certificate for one of the user's own public keys and hands it back as a file,
+     * so they can reach a host directly without that key being in its authorized_keys.
+     * <p>
+     * The key is re-read and its owner checked here. PublicKeyDB.getPublicKey(id) fetches any
+     * key by id without regard to who owns it, so taking the id from the request and signing
+     * whatever came back would let any signed-in user obtain a certificate for somebody else's
+     * key - which is the whole credential.
+     */
+    @Kontrol(path = "/admin/downloadUserCertificate", method = MethodType.GET)
+    public String downloadUserCertificate() throws ServletException {
+        try {
+            Long userId = AuthUtil.getUserId(getRequest().getSession());
+            if (publicKey == null || publicKey.getId() == null) {
+                getResponse().sendError(HttpServletResponse.SC_BAD_REQUEST);
+                return null;
+            }
+            PublicKey stored = PublicKeyDB.getPublicKey(publicKey.getId());
+            if (stored == null || stored.getUserId() == null || !stored.getUserId().equals(userId)) {
+                getResponse().sendError(HttpServletResponse.SC_FORBIDDEN);
+                return null;
+            }
+
+            String certificate = SshCertificateAuth.userCertificateFor(
+                    stored.getPublicKey(), userId, AuthUtil.getUsername(getRequest().getSession()));
+
+            getResponse().setContentType("application/octet-stream");
+            getResponse().setHeader("Content-Disposition",
+                    "attachment;filename=" + certificateFileName(stored.getKeyNm()));
+            try (OutputStream out = getResponse().getOutputStream()) {
+                out.write((certificate.trim() + "\n").getBytes(StandardCharsets.UTF_8));
+                out.flush();
+            }
+        } catch (GeneralSecurityException ex) {
+            // Reasons a user can act on - no authority yet, no systems assigned, a key type
+            // certificates cannot be issued for.
+            log.error(ex.toString(), ex);
+            addError(ex.getMessage());
+            return adminViewKeys();
+        } catch (IOException | SQLException ex) {
+            handleException(ex);
+        }
+        return null;
+    }
+
+    /**
+     * OpenSSH loads a certificate from "&lt;identity file&gt;-cert.pub", so the name has to be
+     * built from whatever the private key was downloaded as - which downloadPvtKey names
+     * "&lt;key name&gt;.key". Naming this "&lt;key name&gt;-cert.pub" instead would leave the
+     * two files sitting next to each other with ssh quietly ignoring the certificate.
+     */
+    private static String certificateFileName(String keyName) {
+        String base = StringUtils.isBlank(keyName) ? "id_ed25519" : keyName.replaceAll("[^A-Za-z0-9_.-]", "_");
+        return base + ".key-cert.pub";
     }
 
     /* ------------------------- Validation ------------------------- */

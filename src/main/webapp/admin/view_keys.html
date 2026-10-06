@@ -175,6 +175,10 @@
                     <td th:text="${#dates.format(p.createDt, 'dd-MMM-yyyy')}"></td>
                     <td>
                         <div>
+                            <a th:if="${certificateAuthEnabled}"
+                               th:href="'downloadUserCertificate.ktrl?publicKey.id=' + ${p.id} + '&amp;_csrf=' + ${session._csrf}"
+                               class="btn btn-secondary edit_btn"
+                               title="Download a short-lived certificate for this key, to reach systems directly">Certificate</a>
                             <button th:if="${!forceUserKeyGenEnabled}" class="btn btn-secondary edit_btn"
                                     data-bs-toggle="modal" th:attr="data-bs-target='#edit_dialog_' + ${p.id}">Edit
                             </button>
