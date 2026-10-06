@@ -368,23 +368,44 @@ public class SSHUtil {
             sftp.connect(CHANNEL_TIMEOUT);
             sftp.put(new ByteArrayInputStream(contents.getBytes(StandardCharsets.UTF_8)), staged);
             sftp.chmod(0600, staged);
+
+            boolean renamed = false;
+            boolean originalRemoved = false;
             try {
-                sftp.rename(staged, authorizedKeys);
-            } catch (SftpException ex) {
-                // SFTP version 3 leaves renaming onto an existing path undefined and servers
-                // without the posix-rename@openssh.com extension refuse it. Removing first
-                // reopens a window where the file is missing, but a far narrower one than
-                // streaming the whole file over the top of it.
-                log.info("Atomic rename of {} not available, falling back to replace", authorizedKeys);
-                sftp.rm(authorizedKeys);
-                sftp.rename(staged, authorizedKeys);
+                try {
+                    sftp.rename(staged, authorizedKeys);
+                    renamed = true;
+                } catch (SftpException ex) {
+                    // SFTP version 3 leaves renaming onto an existing path undefined and
+                    // servers without the posix-rename@openssh.com extension refuse it.
+                    // Removing first reopens a window where the file is missing, but a far
+                    // narrower one than streaming the whole file over the top of it.
+                    log.info("Atomic rename of {} not available, falling back to replace", authorizedKeys);
+                    sftp.rm(authorizedKeys);
+                    originalRemoved = true;
+                    sftp.rename(staged, authorizedKeys);
+                    renamed = true;
+                }
+            } finally {
+                // Only tidy the staged file away when doing so cannot destroy the last copy.
+                // Having removed the original and then failed to rename, the staged file is
+                // the only authorized_keys this host has - deleting it here would leave the
+                // host with none at all, which is the lockout this whole method exists to
+                // avoid. Leave it and say exactly where it is.
+                if (!renamed && originalRemoved) {
+                    log.error("Left the new authorized_keys at {} on this host: it could not be "
+                                    + "renamed into place and {} has already been removed, so that "
+                                    + "staged file is now the only copy. Move it into place to "
+                                    + "restore access.", staged, authorizedKeys);
+                } else if (!renamed) {
+                    try {
+                        sftp.rm(staged);
+                    } catch (Exception ignored) {
+                        // Best effort: the original is still intact either way.
+                    }
+                }
             }
         } finally {
-            try {
-                sftp.rm(staged);
-            } catch (Exception ignored) {
-                // Already renamed away in the normal case; nothing to clean up.
-            }
             sftp.disconnect();
         }
     }

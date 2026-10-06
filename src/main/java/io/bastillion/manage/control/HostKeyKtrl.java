@@ -46,8 +46,11 @@ public class HostKeyKtrl extends BaseKontroller {
     SortedSet sortedSet = new SortedSet();
     @Model(name = "hostKey")
     KnownHostKey hostKey = new KnownHostKey();
+    // static so the request binder cannot set it: BaseKontroller skips static fields, and as
+    // an instance field a crafted link could pass hostKeyVerificationEnabled=true and suppress
+    // the banner warning a manager that host key verification is switched off.
     @Model(name = "hostKeyVerificationEnabled")
-    Boolean hostKeyVerificationEnabled = HostKeyVerifier.isEnabled();
+    static final Boolean hostKeyVerificationEnabled = HostKeyVerifier.isEnabled();
 
     @Model(name = "hostCertAuthorityList")
     List<HostCertAuthority> hostCertAuthorityList = new ArrayList<>();

@@ -38,9 +38,17 @@ public class HostSystem {
      */
     public static final String HOST_KEY_FAIL_STATUS = "HOSTKEYFAIL";
 
-    /** Authenticated with a short-lived SSH certificate Bastillion signed. */
+    /**
+     * Bastillion presented a short-lived certificate it signed.
+     * <p>
+     * What it presented, not what the host accepted: PreferredAuthentications still offers
+     * keyboard-interactive and password after publickey, so a host that rejects the
+     * certificate can still complete the connection another way. Treat this column as "what
+     * was offered" when reading a rollout - the per-system certificate test is what answers
+     * "did this host accept it".
+     */
     public static final String AUTH_METHOD_CERTIFICATE = "CERTIFICATE";
-    /** Authenticated with the application public key, out of the host's authorized_keys. */
+    /** Bastillion presented the application public key, for the host's authorized_keys. */
     public static final String AUTH_METHOD_KEY = "KEY";
 
 

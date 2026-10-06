@@ -82,8 +82,10 @@ public class AuthKeysKtrl extends BaseKontroller {
      * Whether to offer a downloadable certificate per key - meaningless unless the hosts have
      * been told to trust the authority, which is what sshCertificateAuth being on implies.
      */
+    // static so BaseKontroller's binder leaves it alone: it skips static fields, and an
+    // instance field here could be set from the query string, re-exposing the download link.
     @Model(name = "certificateAuthEnabled")
-    Boolean certificateAuthEnabled = SshCertificateAuth.isEnabled();
+    static final Boolean certificateAuthEnabled = SshCertificateAuth.isEnabled();
 
     public AuthKeysKtrl(HttpServletRequest request, HttpServletResponse response) {
         super(request, response);
@@ -223,6 +225,14 @@ public class AuthKeysKtrl extends BaseKontroller {
     @Kontrol(path = "/admin/downloadUserCertificate", method = MethodType.GET)
     public String downloadUserCertificate() throws ServletException {
         try {
+            if (!SshCertificateAuth.isEnabled()) {
+                // The template hides this link when certificates are off, but hiding a link is
+                // not a control: the endpoint has to refuse as well. Hosts configured with
+                // TrustedUserCAKeys during a rollout would otherwise accept a certificate any
+                // signed-in user could mint here while the feature was still switched off.
+                getResponse().sendError(HttpServletResponse.SC_NOT_FOUND);
+                return null;
+            }
             Long userId = AuthUtil.getUserId(getRequest().getSession());
             if (publicKey == null || publicKey.getId() == null) {
                 getResponse().sendError(HttpServletResponse.SC_BAD_REQUEST);

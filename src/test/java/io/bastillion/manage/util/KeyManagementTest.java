@@ -51,9 +51,23 @@ class KeyManagementTest {
     }
 
     @Test
-    void defaultsToManageWhenNothingIsSet() {
+    void defaultsToManageWhenTheSettingIsAbsentAltogether() {
+        // null means no value anywhere - a fresh install taking the shipped default.
         assertEquals(Mode.MANAGE, KeyManagement.resolve(null, null));
-        assertEquals(Mode.MANAGE, KeyManagement.resolve("", ""));
+    }
+
+    @Test
+    void anyLegacyValueOtherThanTrueMeansAppend() {
+        // The code this replaced was "true".equals(keyManagementEnabled), so every other value
+        // meant append-only. Reading just "false" as append would upgrade these installs to
+        // full management, and the next refresh pass would replace authorized_keys on every
+        // host with the list Bastillion knows about - dropping every key it does not.
+        for (String legacy : new String[]{"false", "FALSE", "0", "no", "off", "", "  ", "yes"}) {
+            assertEquals(Mode.APPEND, KeyManagement.resolve(null, legacy),
+                    "keyManagementEnabled=" + legacy + " must stay append-only");
+        }
+        assertEquals(Mode.MANAGE, KeyManagement.resolve(null, "true"));
+        assertEquals(Mode.MANAGE, KeyManagement.resolve(null, " TRUE "));
     }
 
     @Test

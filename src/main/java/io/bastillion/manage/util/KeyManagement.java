@@ -102,9 +102,16 @@ public final class KeyManagement {
                             + "Falling back to keyManagementEnabled.", configured);
             }
         }
-        if ("false".equalsIgnoreCase(StringUtils.trimToEmpty(legacyEnabled))) {
-            return Mode.APPEND;
+        // Mirror the old test exactly rather than inverting it. The code this replaced was
+        // "true".equals(keyManagementEnabled), so every other value - 0, no, off, an explicitly
+        // blank one - meant append-only. Treating just "false" as append would have upgraded
+        // all of those to full management, and the next refresh pass would replace
+        // authorized_keys on every host with the list Bastillion knows about, dropping every
+        // key it does not. Null is different: it means the setting is absent altogether rather
+        // than set to something, which is a fresh install taking the shipped default.
+        if (legacyEnabled == null) {
+            return Mode.MANAGE;
         }
-        return Mode.MANAGE;
+        return "true".equalsIgnoreCase(legacyEnabled.trim()) ? Mode.MANAGE : Mode.APPEND;
     }
 }

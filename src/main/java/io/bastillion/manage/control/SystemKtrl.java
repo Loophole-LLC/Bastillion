@@ -54,8 +54,9 @@ public class SystemKtrl extends BaseKontroller {
     String certTestMessage;
     @Model(name = "certTestOk")
     Boolean certTestOk;
+    // static so the request binder leaves it alone - it skips static fields.
     @Model(name = "certificateAuthEnabled")
-    Boolean certificateAuthEnabled = SshCertificateAuth.isEnabled();
+    static final Boolean certificateAuthEnabled = SshCertificateAuth.isEnabled();
 
     public SystemKtrl(HttpServletRequest request, HttpServletResponse response) {
         super(request, response);
@@ -86,6 +87,13 @@ public class SystemKtrl extends BaseKontroller {
 
     @Kontrol(path = "/manage/viewSystems", method = MethodType.GET)
     public String viewManageSystems() throws ServletException {
+        // Cleared because these are bound from request parameters like any other model field,
+        // and they cannot be static the way the flags above are - they carry a per-request
+        // result. Without this, a link with ?certTestOk=true&certTestMessage=... renders
+        // "Certificate accepted" and arbitrary text for a host nobody tested. Only
+        // testCertificateAuth sets them now.
+        certTestOk = null;
+        certTestMessage = null;
         try {
             sortedSet = SystemDB.getSystemSet(sortedSet);
         } catch (SQLException | GeneralSecurityException ex) {
