@@ -486,8 +486,8 @@ export SSH_CERTIFICATE_VALIDITY_SECONDS=300
 
 **Every managed system must be told to trust the authority first**, or enabling this will
 fail every connection. Bastillion generates its own Ed25519 certificate authority on first
-startup and prints the public key to the console; **Manage → Host Keys** shows it too, with
-these steps. On each host, as root:
+startup and prints the public key to the console; **Settings** shows it too, with these steps,
+a copy button and a `bastillion_ca.pub` download. On each host, as root:
 
 ```bash
 cp bastillion_ca.pub /etc/ssh/bastillion_ca.pub
@@ -499,23 +499,32 @@ systemctl reload sshd
 alternative to key distribution for fleets you configure centrally, not a drop-in
 replacement for it — which is why it is off by default.
 
-**This does not turn off key management by itself, and usually shouldn't.** The two settings
-control different things: `sshCertificateAuth` is how *Bastillion* authenticates to a host,
-while `keyManagement` is whether *your users'* own public keys get distributed to hosts so
-they can `ssh` in directly, outside Bastillion. Certificates here cover only Bastillion's own
-sessions. Running both is the normal arrangement: browser terminals authenticate by
-certificate, and engineers who need a direct shell still get their keys distributed.
+**This does not turn off key management, and usually shouldn't.** The two settings control
+different things: `sshCertificateAuth` is how *Bastillion* authenticates to a host, while
+`keyManagement` is how much of that host's `authorized_keys` Bastillion maintains. See
+[SSH Key Management](#configuration).
 
-If nobody needs direct access and you want Bastillion to stop touching `authorized_keys`
-entirely, set `KEY_MANAGEMENT=off` alongside this — see
-[SSH Key Management](#configuration). Two things you give up by doing so:
+**The usual pairing is `KEY_MANAGEMENT=append`.** That keeps Bastillion's own key in
+`authorized_keys` as a fallback while leaving the rest of the file alone — so you get
+certificate authentication and per-user attribution without Bastillion rewriting user keys on
+every host.
 
-- **Direct user access.** Nothing distributes user keys any more, and certificates for users'
-  own SSH clients are not implemented — only for Bastillion's own sessions.
-- **The fallback.** If signing ever fails, Bastillion falls back to plain public key
-  authentication and logs an error — but only while its key is still in `authorized_keys`.
-  With `off` that key is never placed, so a certificate authority problem becomes a lockout
-  from every system instead of a logged degradation.
+`KEY_MANAGEMENT=off` is the stricter option, for when you want Bastillion provably not
+touching the file at all. What it costs is the fallback: with no application key on the host,
+a certificate authority problem becomes a lockout from that system rather than a logged
+degradation to key authentication.
+
+Two things worth being clear about, because it is easy to credit them to certificates:
+
+- **Distributing users' keys is a `keyManagement` choice, not a certificate one.** Only
+  `manage` distributes them; `append` never has, long before certificates existed. If your
+  engineers rely on Bastillion placing their keys for direct access, stay on `manage` —
+  turning certificates on does not affect that either way.
+- **`off` does not stop direct SSH.** Keys already on a host, however they got there, keep
+  working. It stops Bastillion *maintaining* the file.
+
+Certificates for users' *own* SSH clients are not implemented — only Bastillion's sessions
+use them.
 
 What it buys, beyond not distributing keys: Bastillion authenticates to every system with
 one shared application key, so a host's own logs cannot tell which Bastillion user was
