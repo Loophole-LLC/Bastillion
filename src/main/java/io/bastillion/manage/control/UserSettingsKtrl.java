@@ -9,13 +9,16 @@ import com.jcraft.jsch.JSchException;
 import io.bastillion.common.util.AuthUtil;
 import io.bastillion.common.util.ThemeUtil;
 import io.bastillion.manage.db.AuthDB;
+import io.bastillion.manage.db.CertAuthorityDB;
 import io.bastillion.manage.db.PrivateKeyDB;
 import io.bastillion.manage.db.SystemDB;
 import io.bastillion.manage.db.UserThemeDB;
 import io.bastillion.manage.model.Auth;
+import io.bastillion.manage.model.CertAuthority;
 import io.bastillion.manage.model.UserSettings;
 import io.bastillion.manage.util.PasswordUtil;
 import io.bastillion.manage.util.SSHUtil;
+import io.bastillion.manage.util.SshCertificateAuth;
 import loophole.mvc.annotation.Kontrol;
 import loophole.mvc.annotation.MethodType;
 import loophole.mvc.annotation.Model;
@@ -28,6 +31,9 @@ import org.slf4j.LoggerFactory;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.sql.SQLException;
 import java.util.Collections;
@@ -72,6 +78,16 @@ public class UserSettingsKtrl extends BaseKontroller {
     @Model(name = "publicKey")
     static volatile String publicKey;
 
+    // Shown next to the application public key because they answer the same question - what
+    // Bastillion presents to a host. (Manage -> Host Keys covers the opposite direction: what
+    // hosts present to us.) Global and effectively fixed, like publicKey above, and equally
+    // off-limits to the request binder because it is static.
+    @Model(name = "certAuthorityPublicKey")
+    static volatile String certAuthorityPublicKey;
+
+    @Model(name = "certificateAuthEnabled")
+    Boolean certificateAuthEnabled = SshCertificateAuth.isEnabled();
+
     // Initialized rather than left null: BaseKontroller only default-constructs a model
     // object when a request parameter names it, so POSTing passwordSubmit.ktrl or
     // themeSubmit.ktrl with no auth.* / userSettings.* parameters at all left these null and
@@ -94,6 +110,12 @@ public class UserSettingsKtrl extends BaseKontroller {
     static {
         try {
             publicKey = PrivateKeyDB.getApplicationKey().getPublicKey();
+        } catch (SQLException | GeneralSecurityException ex) {
+            log.error(ex.toString(), ex);
+        }
+        try {
+            CertAuthority ca = CertAuthorityDB.getCertAuthority(CertAuthority.USER_CA);
+            certAuthorityPublicKey = ca == null ? null : ca.getPublicKey();
         } catch (SQLException | GeneralSecurityException ex) {
             log.error(ex.toString(), ex);
         }
@@ -209,6 +231,38 @@ public class UserSettingsKtrl extends BaseKontroller {
         }
 
         return retVal;
+    }
+
+    /**
+     * Serves the certificate authority public key as a file.
+     * <p>
+     * The install step is literally "put this file on every host", so handing over
+     * {@code bastillion_ca.pub} directly avoids a copy-paste that can arrive truncated or with
+     * a stray newline - which then fails on the far end with nothing useful in the logs.
+     * Writes the response itself and returns null, as the other download actions here do.
+     */
+    @Kontrol(path = "/admin/downloadCertAuthority", method = MethodType.GET)
+    public String downloadCertAuthority() throws ServletException {
+        try {
+            if (!Auth.MANAGER.equals(AuthUtil.getUserType(getRequest().getSession()))) {
+                getResponse().sendError(HttpServletResponse.SC_FORBIDDEN);
+                return null;
+            }
+            if (StringUtils.isBlank(certAuthorityPublicKey)) {
+                getResponse().sendError(HttpServletResponse.SC_NOT_FOUND);
+                return null;
+            }
+            getResponse().setContentType("application/octet-stream");
+            getResponse().setHeader("Content-Disposition", "attachment;filename=bastillion_ca.pub");
+            try (OutputStream out = getResponse().getOutputStream()) {
+                out.write((certAuthorityPublicKey.trim() + "\n").getBytes(StandardCharsets.UTF_8));
+                out.flush();
+            }
+        } catch (IOException ex) {
+            log.error(ex.toString(), ex);
+            throw new ServletException("Request processing failed");
+        }
+        return null;
     }
 
     /**

@@ -10,12 +10,15 @@ import com.jcraft.jsch.HostKeyRepository;
 import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.UserInfo;
 import io.bastillion.common.util.AppConfig;
+import io.bastillion.manage.db.HostCertAuthorityDB;
 import io.bastillion.manage.db.HostKeyDB;
+import io.bastillion.manage.model.HostCertAuthority;
 import io.bastillion.manage.model.KnownHostKey;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -192,9 +195,74 @@ public class HostKeyVerifier implements HostKeyRepository {
         return "bastillion:host_key";
     }
 
+    /**
+     * The markers OpenSSH uses in known_hosts, and that JSch looks for here.
+     */
+    private static final String MARKER_CERT_AUTHORITY = "@cert-authority";
+    private static final String MARKER_REVOKED = "@revoked";
+
+    /**
+     * Applies to every host. A trusted host CA is trusted for the whole fleet - the point of
+     * having one is not maintaining a list of hosts.
+     */
+    private static final String ALL_HOSTS = "*";
+
+    /**
+     * Where JSch collects trusted host certificate authorities and revoked keys from.
+     * <p>
+     * When a host presents a host certificate rather than a bare key, {@code Session} hands
+     * verification to {@code OpenSshCertificateHostKeyVerifier} and returns - {@link #check}
+     * is never called for that connection. That verifier reads the trusted CAs by calling
+     * this method and keeping the entries marked {@code @cert-authority}, and the revoked keys
+     * by keeping those marked {@code @revoked}. So returning an empty array here, as this did
+     * before, meant a host certificate could never be trusted no matter what was recorded.
+     * <p>
+     * Revoked host keys are published as {@code @revoked} so that a key a manager distrusted
+     * is refused on the certificate path too, not just by {@link #check}.
+     */
     @Override
     public HostKey[] getHostKey() {
-        return getHostKey(null, null);
+        List<HostKey> entries = new ArrayList<>();
+        try {
+            for (HostCertAuthority authority : HostCertAuthorityDB.getHostCertAuthorities()) {
+                HostKey entry = toHostKey(MARKER_CERT_AUTHORITY, ALL_HOSTS, authority.getPublicKey(),
+                        authority.getComment());
+                if (entry != null) {
+                    entries.add(entry);
+                }
+            }
+            for (KnownHostKey revoked : HostKeyDB.getRevokedHostKeys()) {
+                HostKey entry = toHostKey(MARKER_REVOKED, revoked.getHost(),
+                        revoked.getType() + " " + revoked.getPublicKey(), "revoked");
+                if (entry != null) {
+                    entries.add(entry);
+                }
+            }
+        } catch (Exception ex) {
+            // Returning nothing means "no CA is trusted", which refuses certificates rather
+            // than accepting them - the safe direction for an unreadable store.
+            log.error("Could not read trusted host certificate authorities", ex);
+        }
+        return entries.toArray(new HostKey[0]);
+    }
+
+    /**
+     * Builds a JSch {@link HostKey} from an authorized_keys-form public key, or null if it
+     * cannot be parsed.
+     */
+    private HostKey toHostKey(String marker, String host, String opensshPublicKey, String comment) {
+        try {
+            String[] fields = opensshPublicKey.trim().split("\\s+");
+            if (fields.length < 2) {
+                log.error("Ignoring malformed {} entry for {}", marker, host);
+                return null;
+            }
+            byte[] blob = java.util.Base64.getDecoder().decode(fields[1]);
+            return new HostKey(marker, host, HostKey.GUESS, blob, comment);
+        } catch (Exception ex) {
+            log.error("Ignoring unreadable {} entry for {}", marker, host, ex);
+            return null;
+        }
     }
 
     /**

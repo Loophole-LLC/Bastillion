@@ -7,14 +7,18 @@ package io.bastillion.manage.control;
 
 import io.bastillion.common.util.AuditLogUtil;
 import io.bastillion.common.util.AuthUtil;
+import io.bastillion.manage.db.HostCertAuthorityDB;
 import io.bastillion.manage.db.HostKeyDB;
+import io.bastillion.manage.model.HostCertAuthority;
 import io.bastillion.manage.model.KnownHostKey;
 import io.bastillion.manage.model.SortedSet;
 import io.bastillion.manage.util.HostKeyVerifier;
+import io.bastillion.manage.util.SSHUtil;
 import loophole.mvc.annotation.Kontrol;
 import loophole.mvc.annotation.MethodType;
 import loophole.mvc.annotation.Model;
 import loophole.mvc.base.BaseKontroller;
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,6 +27,8 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.security.GeneralSecurityException;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Review and approve the SSH host keys Bastillion has seen managed systems present.
@@ -43,6 +49,13 @@ public class HostKeyKtrl extends BaseKontroller {
     @Model(name = "hostKeyVerificationEnabled")
     Boolean hostKeyVerificationEnabled = HostKeyVerifier.isEnabled();
 
+    @Model(name = "hostCertAuthorityList")
+    List<HostCertAuthority> hostCertAuthorityList = new ArrayList<>();
+    @Model(name = "hostCertAuthority")
+    HostCertAuthority hostCertAuthority = new HostCertAuthority();
+
+
+
     public HostKeyKtrl(HttpServletRequest request, HttpServletResponse response) {
         super(request, response);
     }
@@ -55,10 +68,76 @@ public class HostKeyKtrl extends BaseKontroller {
         }
         try {
             sortedSet = HostKeyDB.getHostKeySet(sortedSet);
+            loadCertAuthorities();
         } catch (SQLException | GeneralSecurityException ex) {
             log.error(ex.toString(), ex);
             throw new ServletException(ex.toString(), ex);
         }
+        return "/manage/view_host_keys.html";
+    }
+
+    private void loadCertAuthorities() throws SQLException, GeneralSecurityException {
+        // Bastillion's own authority is shown under Settings, beside the application key -
+        // this screen is about what hosts present to us, not what we present to them.
+        hostCertAuthorityList = HostCertAuthorityDB.getHostCertAuthorities();
+    }
+
+    /**
+     * Trusts a host certificate authority. A system presenting a host certificate signed by it
+     * is then accepted without its own host key being recorded or approved.
+     */
+    @Kontrol(path = "/manage/saveHostCertAuthority", method = MethodType.POST)
+    public String saveHostCertAuthority() throws ServletException {
+        try {
+            String publicKey = hostCertAuthority.getPublicKey();
+            if (StringUtils.isBlank(publicKey)) {
+                addError("A host certificate authority public key is required");
+                return reloadView();
+            }
+            String fingerprint = SSHUtil.getFingerprint(publicKey.trim());
+            if (StringUtils.isBlank(fingerprint)) {
+                addError("That does not look like an SSH public key");
+                return reloadView();
+            }
+            if (HostCertAuthorityDB.exists(fingerprint)) {
+                addError("That certificate authority is already trusted");
+                return reloadView();
+            }
+            HostCertAuthorityDB.insertHostCertAuthority(publicKey.trim(), fingerprint,
+                    hostCertAuthority.getComment());
+            hostKeyAuditLogger.info("{} - host certificate authority trusted {}",
+                    AuditLogUtil.safe(AuthUtil.getUsername(getRequest().getSession())),
+                    AuditLogUtil.safe(fingerprint));
+        } catch (SQLException | GeneralSecurityException ex) {
+            log.error(ex.toString(), ex);
+            throw new ServletException(ex.toString(), ex);
+        }
+        return "redirect:/manage/viewHostKeys.ktrl?" + sortedSet.toQueryString();
+    }
+
+    @Kontrol(path = "/manage/deleteHostCertAuthority", method = MethodType.POST)
+    public String deleteHostCertAuthority() throws ServletException {
+        try {
+            if (hostCertAuthority.getId() != null) {
+                HostCertAuthorityDB.deleteHostCertAuthority(hostCertAuthority.getId());
+                hostKeyAuditLogger.info("{} - host certificate authority removed (id {})",
+                        AuditLogUtil.safe(AuthUtil.getUsername(getRequest().getSession())),
+                        hostCertAuthority.getId());
+            }
+        } catch (SQLException | GeneralSecurityException ex) {
+            log.error(ex.toString(), ex);
+            throw new ServletException(ex.toString(), ex);
+        }
+        return "redirect:/manage/viewHostKeys.ktrl?" + sortedSet.toQueryString();
+    }
+
+    /**
+     * Re-renders the screen with its lists intact, for a validation failure that should keep
+     * the user on the page rather than redirecting.
+     */
+    private String reloadView() throws SQLException, GeneralSecurityException {
+        sortedSet = HostKeyDB.getHostKeySet(sortedSet);
+        loadCertAuthorities();
         return "/manage/view_host_keys.html";
     }
 

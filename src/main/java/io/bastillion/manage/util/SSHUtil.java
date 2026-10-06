@@ -346,10 +346,7 @@ public class SSHUtil {
             if (StringUtils.isBlank(passphrase)) passphrase = appKey.getPassphrase();
             if (passphrase == null) passphrase = "";
 
-            jsch.addIdentity(appKey.getId().toString(),
-                    appKey.getPrivateKey().trim().getBytes(),
-                    appKey.getPublicKey().getBytes(),
-                    passphrase.getBytes());
+            addApplicationIdentity(jsch, appKey, passphrase, hostSystem, usernameFor(userId));
 
             Session session = jsch.getSession(hostSystem.getUser(), hostSystem.getHost(), hostSystem.getPort());
             if (StringUtils.isNotBlank(password)) session.setPassword(password.getBytes(StandardCharsets.UTF_8));
@@ -437,6 +434,55 @@ public class SSHUtil {
         session.setConfig("StrictHostKeyChecking", "yes");
     }
 
+    /**
+     * Registers the application key as the identity for this session, as a certificate when
+     * {@code sshCertificateAuth} is on and as a bare public key otherwise.
+     * <p>
+     * JSch needs no special call for the certificate case: its four-argument
+     * {@code addIdentity} inspects the bytes in the public key slot, and routes to its
+     * certificate-aware identity when it finds a certificate there rather than a plain key.
+     * The private key is the same either way - a certificate attests to a key, it does not
+     * replace one.
+     */
+    private static void addApplicationIdentity(JSch jsch, ApplicationKey appKey, String passphrase,
+                                               HostSystem hostSystem, String username) throws JSchException {
+        String certificate = SshCertificateAuth.certificateFor(hostSystem, username);
+        byte[] publicCredential = certificate != null
+                ? certificate.getBytes(StandardCharsets.UTF_8)
+                : appKey.getPublicKey().getBytes();
+
+        jsch.addIdentity(appKey.getId().toString(),
+                appKey.getPrivateKey().trim().getBytes(),
+                publicCredential,
+                passphrase.getBytes());
+    }
+
+    /**
+     * The Bastillion username behind a connection, for the certificate key id that the target
+     * host logs. Best effort: a connection still proceeds if the lookup fails, just without
+     * naming the user on the host side.
+     */
+    private static String usernameFor(Long userId) {
+        if (userId == null) {
+            return null;
+        }
+        try {
+            User user = UserDB.getUser(userId);
+            return user == null ? null : user.getUsername();
+        } catch (Exception ex) {
+            log.error("Could not read the username for user id {}", userId, ex);
+            return null;
+        }
+    }
+
+    /**
+     * True if this failure was the host key being refused rather than anything else.
+     * <p>
+     * JSch raises a {@link JSchHostKeyException} subclass for an unknown, changed or revoked
+     * host key, and for a host certificate signed by an untrusted CA - so the type tells us
+     * this without matching on message text. The cause chain is walked because the connect
+     * call wraps it.
+     */
     // --- Authentication and Add Key ---
     public static HostSystem authAndAddPubKey(HostSystem hostSystem, String passphrase, String password) {
         JSch jsch = new JSch();
@@ -447,10 +493,7 @@ public class SSHUtil {
             if (StringUtils.isBlank(passphrase)) passphrase = appKey.getPassphrase();
             if (passphrase == null) passphrase = "";
 
-            jsch.addIdentity(appKey.getId().toString(),
-                    appKey.getPrivateKey().trim().getBytes(),
-                    appKey.getPublicKey().getBytes(),
-                    passphrase.getBytes());
+            addApplicationIdentity(jsch, appKey, passphrase, hostSystem, null);
 
             session = jsch.getSession(hostSystem.getUser(), hostSystem.getHost(), hostSystem.getPort());
             if (password != null && !password.isEmpty()) session.setPassword(password.getBytes(StandardCharsets.UTF_8));

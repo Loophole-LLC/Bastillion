@@ -23,6 +23,11 @@
                 });
             });
 
+            //submit add form from its modal footer
+            $(".submit_btn").click(function () {
+                $(this).parents('.modal').find('form').submit();
+            });
+
             $(".sort").click(function () {
                 var id = $(this).attr('id')
 
@@ -163,6 +168,98 @@
         <strong>No host keys recorded yet</strong>
         <span>Bastillion records the SSH host key of each managed system the first time it connects to it.</span>
     </p>
+
+    <h3 class="spacer">Certificate Authorities</h3>
+
+    <p>Bastillion's own certificate authority &mdash; the key you install on each system so it
+        will accept Bastillion's certificates &mdash; lives with the application key under
+        <a th:href="'../admin/userSettings.ktrl?_csrf=' + ${session._csrf}">Settings</a>, since
+        both are about what Bastillion presents to a host. This screen is the other direction:
+        what hosts present to us.</p>
+
+    <h4 class="spacer">Trusted host certificate authorities</h4>
+    <p>A system presenting a host certificate signed by one of these is accepted without its
+        own host key needing to be recorded or approved above - useful for a fleet that is
+        reprovisioned often.</p>
+    <div class="scrollWrapper" th:if="${!hostCertAuthorityList.empty}">
+        <table class="table-striped scrollableTable">
+            <thead>
+            <tr>
+                <th>Fingerprint</th>
+                <th>Comment</th>
+                <th>Trusted Since</th>
+                <th><span class="visually-hidden">Actions</span></th>
+            </tr>
+            </thead>
+            <tbody>
+            <template th:each="ca : ${hostCertAuthorityList}" th:remove="tag">
+                <tr>
+                    <td><code th:text="${ca.fingerprint}"></code></td>
+                    <td th:text="${ca.comment} ?: '-'"></td>
+                    <td th:text="${#dates.format(ca.createTm, 'yyyy-MM-dd HH:mm')}"></td>
+                    <td>
+                        <form th:id="'delete_ca_frm_' + ${ca.id}"
+                              th:action="@{/manage/deleteHostCertAuthority.ktrl}" method="post">
+                            <input type="hidden" name="_csrf" th:value="${session._csrf}">
+                            <input type="hidden" name="hostCertAuthority.id" th:value="${ca.id}">
+                        </form>
+                        <button data-confirm-title="Stop trusting authority"
+                                data-confirm-label="Stop trusting"
+                                th:attr="data-form='delete_ca_frm_' + ${ca.id},
+                                         data-confirm='Stop trusting ' + ${ca.fingerprint} + '? Systems that rely on a host certificate from it will need their own host key approved instead.'"
+                                class="btn btn-secondary del_btn host_key_action_btn">Stop trusting
+                        </button>
+                    </td>
+                </tr>
+            </template>
+            </tbody>
+        </table>
+    </div>
+    <p class="empty-state" th:if="${hostCertAuthorityList.empty}">
+        <strong>No host certificate authorities trusted</strong>
+        <span>Add one to accept host certificates instead of approving each system's key.</span>
+    </p>
+    <button class="btn btn-secondary add_btn spacer spacer-bottom" data-bs-toggle="modal"
+            data-bs-target="#add_ca_dialog">Trust Host Authority
+    </button>
+    <div id="add_ca_dialog" class="modal fade">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Trust a host certificate authority</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div th:replace="~{_res/inc/errors}"></div>
+                    <form th:action="@{/manage/saveHostCertAuthority.ktrl}" method="post"
+                          id="save_ca_form">
+                        <input type="hidden" name="_csrf" th:value="${session._csrf}">
+                        <table>
+                            <tr>
+                                <td>Public key</td>
+                                <td><textarea name="hostCertAuthority.publicKey" class="form-control"
+                                              title="Host CA public key" rows="4" cols="40"
+                                              placeholder="ssh-ed25519 AAAA... host-ca"></textarea></td>
+                            </tr>
+                            <tr>
+                                <td>Comment</td>
+                                <td><input type="text" name="hostCertAuthority.comment"
+                                           class="form-control" title="Comment" size="25"></td>
+                            </tr>
+                        </table>
+                        <input type="hidden" name="sortedSet.orderByDirection"
+                               th:value="${sortedSet.orderByDirection}">
+                        <input type="hidden" name="sortedSet.orderByField"
+                               th:value="${sortedSet.orderByField}">
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary cancel_btn" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-secondary submit_btn">Trust authority</button>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 <div th:replace="~{_res/inc/confirm}"></div>
 </body>

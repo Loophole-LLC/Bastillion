@@ -100,7 +100,25 @@ target systems by hand, no hunting down which server has which stale key.
 
 ![Manage SSH keys with profile, fingerprint, creation date, and delete actions](docs/screenshots/manage-ssh-keys.png)
 
-### 6. Every session is recorded — audit and replay
+### 6. Verify the host is who it claims to be
+
+Every connection checks the host key the target system presents against the one Bastillion
+recorded for it. The first time a host is seen, its key is recorded and trusted; if that key
+later changes, the connection is **refused** and the system appears under **Manage → Host
+Keys** as *changed — blocked*, showing the approved fingerprint and the offered one together
+so you can tell a rebuilt host from an intercepted connection. Trusting the new key is a
+deliberate, logged act.
+
+This matters more for a bastion than for a laptop. Bastillion hands the target system its
+private key, and on authentication fallback the password or passphrase you supplied — so
+anything that can answer on a managed system's address collects credentials for it. Until
+this check existed, nothing compared that key against anything.
+
+Set `hostKeyVerification=strict` to also require a manager to approve each newly seen host
+before the first connection to it, or `off` to restore the old behaviour — see
+[Configuration](#configuration).
+
+### 7. Every session is recorded — audit and replay
 
 Everything typed and every byte returned in those terminals is recorded automatically.
 Managers open **Audit Sessions**, filter by user or system, and replay any session —
@@ -120,6 +138,14 @@ default (`deleteAuditLogAfter`), and recording can be switched off with
 ---
 
 ## 🚀 What's New
+- **SSH host key verification** — the key each managed system presents is recorded on first
+  sight and checked on every connection after it; a changed key blocks the connection and
+  surfaces under **Manage → Host Keys** for a manager to resolve. On by default
+  (`hostKeyVerification=accept-new`) — see [How It Works](#6-verify-the-host-is-who-it-claims-to-be)
+- **SSH certificate authentication** (optional) — Bastillion can sign a short-lived
+  certificate per connection instead of relying on its public key being in each host's
+  `authorized_keys`, which also puts the Bastillion username in the target host's own auth
+  log. Off by default; needs each host configured to trust the CA — see [Configuration](#configuration)
 - **SAML 2.0 SSO** — sign in via an enterprise IdP (Entra ID, Okta, ADFS, and others) — see [Configuration](#configuration)
 - **Licensing** — free at up to 8 systems, paid tiers available at [loophole.company/pricing.html](https://loophole.company/pricing.html) (see [Licensing](#licensing) below)
 - **Session audit & replay, on by default** — every terminal session is recorded and can be replayed under **Audit Sessions**, streamed to the browser so even huge sessions load instantly
@@ -286,9 +312,15 @@ Defaults to port 8080 in this mode; set `PORT` to change it.
 ## Configuration
 
 Every setting below can be set as an **environment variable** — take the property name and
-insert an underscore before each capital letter, then uppercase it: `licenseKey` →
-`LICENSE_KEY`, `dbUser` → `DB_USER`, `sshKeyType` → `SSH_KEY_TYPE`. This is the recommended
-way to configure Bastillion, especially in containers — no file to mount or bake in.
+insert an underscore before each capital letter that follows a lowercase letter or digit,
+then uppercase it: `licenseKey` → `LICENSE_KEY`, `dbUser` → `DB_USER`, `sshKeyType` →
+`SSH_KEY_TYPE`. This is the recommended way to configure Bastillion, especially in
+containers — no file to mount or bake in.
+
+Note the "follows a lowercase letter or digit" part: a run of capitals stays together, so
+`clientIPHeader` → `CLIENT_IPHEADER` (not `CLIENT_IP_HEADER`) and `maxLoginAttemptsPerIP` →
+`MAX_LOGIN_ATTEMPTS_PER_IP`. Each block below spells out the variable for every setting, so
+you shouldn't need to apply the rule by hand.
 
 `BastillionConfig.properties` still works as a fallback (env vars always win if both are
 set), and is where any value Bastillion generates for you at first startup — like a random
@@ -387,6 +419,133 @@ the key itself:
 #   ed25519 - Default and recommended (≈ RSA-4096, secure and fast)
 #   ed448  - Extra-strong (≈ RSA-8192, slower and less supported)
 export SSH_KEY_TYPE=ed25519
+```
+</details>
+
+<details>
+<summary><strong>SSH Host Key Verification</strong></summary>
+
+Controls what happens when a managed system presents an SSH host key. Recorded keys are
+reviewed under **Manage → Host Keys**, where a changed or newly seen key can be trusted,
+revoked, or forgotten.
+
+```bash
+# accept-new (default) - record and trust each host's key the first time it is seen, then
+#                        refuse to connect if that host ever presents a different one
+# strict               - as accept-new, but a newly seen host key must also be approved by a
+#                        manager before the first connection to that host is allowed
+# off                  - no host key verification at all (the behaviour before 6.0.0)
+export HOST_KEY_VERIFICATION=accept-new
+```
+
+`accept-new` is the default so that upgrading an existing instance needs no action: each
+host's key is recorded on its next connection, rather than every connection being refused
+until a manager has approved every host. It still catches the case that matters — a key that
+changes underneath you.
+
+Host key decisions are written to the `io.bastillion.manage.util.SystemAudit` log — which
+host keys were trusted on first sight, and which connections were refused.
+</details>
+
+<details>
+<summary><strong>SSH Certificate Authentication</strong></summary>
+
+By default Bastillion authenticates to each system with its own public key, which has to be
+present in that system's `authorized_keys` (see [How It Works](#2-register-a-system)).
+Instead, it can sign a short-lived SSH certificate per connection:
+
+```bash
+# off (default) - authenticate with the application key
+# on            - sign a certificate per connection and authenticate with that
+export SSH_CERTIFICATE_AUTH=on
+
+# How long an issued certificate stays valid (seconds). Short on purpose: a leaked
+# certificate stops working on its own rather than needing to be revoked.
+export SSH_CERTIFICATE_VALIDITY_SECONDS=300
+```
+
+**Every managed system must be told to trust the authority first**, or enabling this will
+fail every connection. Bastillion generates its own Ed25519 certificate authority on first
+startup and prints the public key to the console; **Manage → Host Keys** shows it too, with
+these steps. On each host, as root:
+
+```bash
+cp bastillion_ca.pub /etc/ssh/bastillion_ca.pub
+echo 'TrustedUserCAKeys /etc/ssh/bastillion_ca.pub' >> /etc/ssh/sshd_config
+systemctl reload sshd
+```
+
+⚠️ That needs **root on each host**, which pushing to `authorized_keys` does not. This is an
+alternative to key distribution for fleets you configure centrally, not a drop-in
+replacement for it — which is why it is off by default.
+
+**This does not turn off key management by itself, and usually shouldn't.** The two settings
+control different things: `sshCertificateAuth` is how *Bastillion* authenticates to a host,
+while `keyManagement` is whether *your users'* own public keys get distributed to hosts so
+they can `ssh` in directly, outside Bastillion. Certificates here cover only Bastillion's own
+sessions. Running both is the normal arrangement: browser terminals authenticate by
+certificate, and engineers who need a direct shell still get their keys distributed.
+
+Keeping the application key in `authorized_keys` is also a deliberate safety net: if signing
+ever fails, Bastillion falls back to plain public key authentication and logs an error, which
+only works while that key is still there.
+
+What it buys, beyond not distributing keys: Bastillion authenticates to every system with
+one shared application key, so a host's own logs cannot tell which Bastillion user was
+responsible for a session. Each certificate carries a key id of `bastillion:<username>`,
+which sshd records on every accepted connection:
+
+```
+Accepted publickey for deploy ... ED25519-CERT SHA256:4P6XvKoX... ID bastillion:alice (serial 7) CA ED25519 SHA256:ztZuuKqR...
+```
+
+If signing fails for any reason, Bastillion falls back to plain public key authentication and
+logs an error, rather than locking every system out at once.
+
+**Host certificates** work in the other direction: trust a host certificate authority under
+**Manage → Host Keys**, and any system presenting a host certificate signed by it is accepted
+without its individual host key needing to be recorded or approved — useful for a fleet that
+is reprovisioned often.
+</details>
+
+<details>
+<summary><strong>Web Hardening</strong></summary>
+
+Bastillion sends `Content-Security-Policy`, `X-Content-Type-Options`, `X-Frame-Options`,
+`Referrer-Policy` and `Strict-Transport-Security` on every response. HSTS is tunable:
+
+```bash
+# How long a browser should refuse plain HTTP to this site (seconds, one year by default)
+export HSTS_MAX_AGE=31536000
+
+# Extend that to every subdomain of the host serving Bastillion
+export HSTS_INCLUDE_SUB_DOMAINS=false
+
+# Also request inclusion in browsers' built-in HSTS lists (requires the above)
+export HSTS_PRELOAD=false
+```
+
+`hstsIncludeSubDomains` is off by default because it is not a reversible mistake: a browser
+that has cached it refuses plain HTTP to every subdomain of that host for the whole
+`hstsMaxAge`. On a dedicated host (`bastillion.example.com`) it affects essentially nothing
+and is worth turning on; served from an apex domain it would force HTTPS across every sibling
+subdomain. `hstsPreload` is harder still to undo — removal takes months to reach users.
+
+Failed logins are throttled per client IP, deliberately not per account, so nobody can lock
+out a known admin username by failing its password on purpose:
+
+```bash
+# Failed attempts allowed per client IP within the window below
+export MAX_LOGIN_ATTEMPTS_PER_IP=10
+export LOGIN_THROTTLE_WINDOW_MINUTES=5
+
+# Ceiling on how many client IPs are tracked at once
+export MAX_THROTTLED_IPS=20000
+
+# Header to trust for the client IP (e.g. X-Forwarded-For). Only set this behind a reverse
+# proxy that writes the header itself - trusting a client-suppliable header without one lets
+# an attacker vary it freely and bypass the throttle.
+export CLIENT_IPHEADER=
 ```
 </details>
 
@@ -597,10 +756,9 @@ Audit history is kept for `deleteAuditLogAfter` days (90 by default). Disable it
 export ENABLE_INTERNAL_AUDIT=false
 ```
 
-There is also a file-based audit log, disabled by default. Enable it in **log4j2.xml** by
-uncommenting:
-- `io.bastillion.manage.util.SystemAudit`
-- `audit-appender`
+Separately, the `io.bastillion.manage.util.SystemAudit` log records host key and SSH
+certificate decisions, and goes to the console by default. To send it to a file instead,
+uncomment `audit-appender` in **log4j2.xml** and point that logger at it:
 
 > https://github.com/Loophole-LLC/Bastillion/blob/main/src/main/resources/log4j2.xml#L19-L22
 </details>

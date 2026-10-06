@@ -129,7 +129,7 @@ public class HostKeyDB {
             stmt.setString(6, status);
             stmt.executeUpdate();
         }
-    }
+        }
 
     /**
      * Flags a host as presenting a key other than its trusted one, keeping both.
@@ -152,7 +152,7 @@ public class HostKeyDB {
             stmt.setString(6, type);
             stmt.executeUpdate();
         }
-    }
+        }
 
     /**
      * Trusts a host key: approves a pending one, or accepts the newly offered key of a
@@ -180,7 +180,7 @@ public class HostKeyDB {
             stmt.setLong(4, id);
             stmt.executeUpdate();
         }
-    }
+        }
 
     /**
      * Distrusts a host key without forgetting it, so connections stay refused rather than
@@ -194,7 +194,7 @@ public class HostKeyDB {
             stmt.setLong(2, id);
             stmt.executeUpdate();
         }
-    }
+        }
 
     /**
      * Forgets a host key entirely, so the next connection treats the host as new.
@@ -205,6 +205,27 @@ public class HostKeyDB {
             stmt.setLong(1, id);
             stmt.executeUpdate();
         }
+        }
+
+    /**
+     * @return host keys a manager has explicitly distrusted
+     * <p>
+     * Published to JSch as {@code @revoked} entries by HostKeyVerifier.getHostKey(), so a
+     * revoked key is refused on the host certificate path as well as by direct comparison.
+     */
+    public static List<KnownHostKey> getRevokedHostKeys() throws SQLException, GeneralSecurityException {
+        List<KnownHostKey> revoked = new ArrayList<>();
+        try (Connection con = DBUtils.getConn();
+             PreparedStatement stmt = con.prepareStatement(
+                     "select k.*, null as approved_by_username from host_key k where k.status = ?")) {
+            stmt.setString(1, KnownHostKey.REVOKED);
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    revoked.add(mapHostKey(rs));
+                }
+            }
+        }
+        return revoked;
     }
 
     /**

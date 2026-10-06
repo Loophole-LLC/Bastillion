@@ -7,6 +7,7 @@
 <html xmlns:th="http://www.thymeleaf.org" data-bs-theme="dark">
 <head>
     <meta th:replace="~{_res/inc/header}">
+    <script th:src="@{/_res/js/copy-to-clipboard.js}"></script>
     <title>Bastillion - User Settings</title>
 </head>
 
@@ -117,13 +118,51 @@
                     <h2>Application public key</h2>
                     <p>Add this key to a system when registering it with Bastillion.</p>
                 </div>
+                <button type="button" class="btn btn-secondary copy_btn"
+                        data-copy-from="application-public-key">Copy</button>
             </div>
-            <pre class="settings-key" th:text="${publicKey}"></pre>
+            <pre class="settings-key" id="application-public-key" th:text="${publicKey}"></pre>
         </section>
     </div>
 
     <div class="settings-grid settings-admin-grid"
          th:if="${#strings.equals(session.userType,'M')}">
+        <section class="settings-card settings-card-wide">
+            <div class="settings-card-header settings-card-header-inline">
+                <div>
+                    <h2>Certificate authority public key</h2>
+                    <p>Install this on a system to let Bastillion authenticate with a short-lived
+                        certificate instead of needing its public key in that system's
+                        <code>authorized_keys</code>. Certificate authentication is currently
+                        <strong th:if="${certificateAuthEnabled}">on</strong><strong
+                                th:unless="${certificateAuthEnabled}">off</strong>
+                        (<code>sshCertificateAuth</code>).</p>
+                </div>
+                <span class="settings-card-actions">
+                    <button type="button" class="btn btn-secondary copy_btn"
+                            th:if="${certAuthorityPublicKey != null}"
+                            data-copy-from="cert-authority-public-key">Copy</button>
+                    <a class="btn btn-secondary" th:if="${certAuthorityPublicKey != null}"
+                       th:href="'downloadCertAuthority.ktrl?_csrf=' + ${session._csrf}">Download</a>
+                </span>
+            </div>
+            <p th:if="${certAuthorityPublicKey == null}" class="error">
+                No certificate authority has been generated. One is created at startup &mdash;
+                check the server log for errors.
+            </p>
+            <template th:if="${certAuthorityPublicKey != null}" th:remove="tag">
+                <pre class="settings-key" id="cert-authority-public-key"
+                     th:text="${certAuthorityPublicKey}"></pre>
+                <p>On each managed system, as root:</p>
+                <pre class="settings-key">cp bastillion_ca.pub /etc/ssh/bastillion_ca.pub
+echo 'TrustedUserCAKeys /etc/ssh/bastillion_ca.pub' &gt;&gt; /etc/ssh/sshd_config
+systemctl reload sshd</pre>
+                <p>Each certificate carries a key id of <code>bastillion:&lt;username&gt;</code>,
+                    which the host records in its own auth log &mdash; so a session can be traced to
+                    a Bastillion user on the system itself, not just here.</p>
+            </template>
+        </section>
+
         <details class="settings-card settings-danger"
                  th:open="${importPrivateKey != null or importPublicKey != null}">
             <summary>

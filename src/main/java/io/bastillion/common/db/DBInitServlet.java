@@ -7,7 +7,9 @@ package io.bastillion.common.db;
 
 import com.jcraft.jsch.JSchException;
 import io.bastillion.common.util.AppConfig;
+import io.bastillion.manage.db.CertAuthorityDB;
 import io.bastillion.manage.model.Auth;
+import io.bastillion.manage.model.CertAuthority;
 import io.bastillion.manage.util.DBUtils;
 import io.bastillion.manage.util.EncryptionUtil;
 import io.bastillion.manage.util.RefreshAuthKeyUtil;
@@ -49,6 +51,33 @@ public class DBInitServlet extends jakarta.servlet.http.HttpServlet {
      * did not match the trusted one, so the two can be compared instead of the new key
      * quietly replacing the approved one.
      */
+    /**
+     * Bastillion's SSH certificate authority keypair - see
+     * io.bastillion.manage.util.SshCertificateUtil. One row per authority type; next_serial
+     * is the certificate serial counter sshd logs and a revocation list revokes against.
+     */
+    /**
+     * Host certificate authorities Bastillion trusts - the fleet equivalent of a
+     * {@code @cert-authority} line in known_hosts. A host presenting a certificate signed by
+     * one of these needs no individual host key recorded or approved for it.
+     */
+    private static final String CREATE_HOST_CERT_AUTHORITY_TABLE =
+            "create table if not exists host_cert_authority ("
+                    + "id INTEGER PRIMARY KEY AUTO_INCREMENT, "
+                    + "public_key varchar not null, "
+                    + "fingerprint varchar not null unique, "
+                    + "comment varchar, "
+                    + "create_tm timestamp not null default CURRENT_TIMESTAMP())";
+
+    private static final String CREATE_CERT_AUTHORITY_TABLE =
+            "create table if not exists cert_authority ("
+                    + "id INTEGER PRIMARY KEY AUTO_INCREMENT, "
+                    + "type varchar not null unique, "
+                    + "public_key varchar not null, "
+                    + "private_key varchar not null, "
+                    + "create_tm timestamp not null default CURRENT_TIMESTAMP(), "
+                    + "next_serial BIGINT not null default 0)";
+
     private static final String CREATE_HOST_KEY_TABLE =
             "create table if not exists host_key ("
                     + "id INTEGER PRIMARY KEY AUTO_INCREMENT, "
@@ -138,8 +167,6 @@ public class DBInitServlet extends jakarta.servlet.http.HttpServlet {
 
                 statement.executeUpdate("create table if not exists public_keys (id INTEGER PRIMARY KEY AUTO_INCREMENT, key_nm varchar not null, type varchar, fingerprint varchar, public_key varchar, enabled boolean not null default true, create_dt timestamp not null default CURRENT_TIMESTAMP(), user_id INTEGER, profile_id INTEGER, foreign key (profile_id) references profiles(id) on delete cascade, foreign key (user_id) references users(id) on delete cascade)");
 
-                statement.executeUpdate(CREATE_HOST_KEY_TABLE);
-
                 statement.executeUpdate("create table if not exists session_log (id BIGINT PRIMARY KEY AUTO_INCREMENT, session_tm timestamp default CURRENT_TIMESTAMP, first_nm varchar, last_nm varchar, username varchar not null, ip_address varchar)");
                 statement.executeUpdate("create table if not exists terminal_log (session_id BIGINT, instance_id INTEGER, output varchar not null, log_tm timestamp default CURRENT_TIMESTAMP, display_nm varchar not null, username varchar not null, host varchar not null, port INTEGER not null, foreign key (session_id) references session_log(id) on delete cascade)");
 
@@ -172,11 +199,30 @@ public class DBInitServlet extends jakarta.servlet.http.HttpServlet {
             // IF NOT EXISTS makes this migration safe on every subsequent startup.
             statement.executeUpdate("alter table user_theme add column if not exists ui_theme varchar(5) not null default 'dark'");
 
-            // Existing installations predate host key verification and have no recorded keys,
-            // which is why hostKeyVerification defaults to accept-new rather than strict - an
-            // upgrade records each host's key on its next connection instead of refusing every
+            // Tables added in 6.0.0. Created here rather than in the fresh-install branch
+            // above so that an existing installation picks them up on its next startup; all
+            // three are "create table if not exists", so running them every time is a no-op
+            // once they are there.
+            //
+            // Existing installations have no recorded host keys, which is why
+            // hostKeyVerification defaults to accept-new rather than strict - an upgrade
+            // records each host's key on its next connection instead of refusing every
             // connection until a manager has approved every host.
             statement.executeUpdate(CREATE_HOST_KEY_TABLE);
+            statement.executeUpdate(CREATE_CERT_AUTHORITY_TABLE);
+            statement.executeUpdate(CREATE_HOST_CERT_AUTHORITY_TABLE);
+
+            // Generated whether or not certificate authentication is switched on: the public
+            // half has to be installed on every managed system as TrustedUserCAKeys before the
+            // feature can be enabled, so an operator has to be able to read it first. On its
+            // own it grants nothing - nothing trusts this key until a host is told to.
+            String caPublicKey = CertAuthorityDB.generateIfAbsent(CertAuthority.USER_CA);
+            if (caPublicKey != null) {
+                System.out.println("Bastillion Generated SSH User Certificate Authority Key:");
+                System.out.println(caPublicKey);
+                System.out.println("Install this on managed systems as TrustedUserCAKeys to use "
+                        + "certificate authentication (sshCertificateAuth=on).");
+            }
 
             //if reset ssh application key then generate new key
             if (resetSSHKey) {
