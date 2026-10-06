@@ -37,7 +37,7 @@ import java.util.List;
  *       matters: a key that changes under you.</li>
  *   <li>{@code strict} - additionally require a manager to approve each newly seen host key
  *       before the first connection to it is allowed.</li>
- *   <li>{@code off} - no verification (the pre-5.2.2 behavior).</li>
+ *   <li>{@code off} - no verification (the pre-6.0.0 behavior).</li>
  * </ul>
  */
 public class HostKeyVerifier implements HostKeyRepository {
