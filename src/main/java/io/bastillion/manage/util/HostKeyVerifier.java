@@ -133,30 +133,28 @@ public class HostKeyVerifier implements HostKeyRepository {
     private int evaluate(KnownHostKey known, HostAddress address, String hostPort,
                          String offeredType, String offeredKey, String offeredFingerprint)
             throws Exception {
-        {
-            if (KnownHostKey.REVOKED.equals(known.getStatus())) {
-                log.error("Refusing {}: its {} host key ({}) has been revoked",
-                        hostPort, offeredType, offeredFingerprint);
-                return NOT_INCLUDED;
-            }
-            if (!offeredKey.equals(known.getPublicKey())) {
-                // Record before refusing, so the manage screen can show the approved key and
-                // the offered one side by side.
-                HostKeyDB.markChanged(address.host(), address.port(), offeredType, offeredKey, offeredFingerprint);
-                log.error("Refusing {}: its {} host key changed from {} to {}. Either the host was "
-                                + "rebuilt or the connection is being intercepted - a manager must resolve "
-                                + "this on the Host Keys screen before Bastillion will connect again.",
-                        hostPort, offeredType, known.getFingerprint(), offeredFingerprint);
-                return CHANGED;
-            }
-            if (KnownHostKey.PENDING.equals(known.getStatus())
-                    || KnownHostKey.CHANGED.equals(known.getStatus())) {
-                log.error("Refusing {}: its {} host key ({}) is awaiting approval on the Host Keys screen",
-                        hostPort, offeredType, offeredFingerprint);
-                return NOT_INCLUDED;
-            }
-            return OK;
+        if (KnownHostKey.REVOKED.equals(known.getStatus())) {
+            log.error("Refusing {}: its {} host key ({}) has been revoked",
+                    hostPort, offeredType, offeredFingerprint);
+            return NOT_INCLUDED;
         }
+        if (!offeredKey.equals(known.getPublicKey())) {
+            // Record before refusing, so the manage screen can show the approved key and
+            // the offered one side by side.
+            HostKeyDB.markChanged(address.host(), address.port(), offeredType, offeredKey, offeredFingerprint);
+            log.error("Refusing {}: its {} host key changed from {} to {}. Either the host was "
+                            + "rebuilt or the connection is being intercepted - a manager must resolve "
+                            + "this on the Host Keys screen before Bastillion will connect again.",
+                    hostPort, offeredType, known.getFingerprint(), offeredFingerprint);
+            return CHANGED;
+        }
+        if (KnownHostKey.PENDING.equals(known.getStatus())
+                || KnownHostKey.CHANGED.equals(known.getStatus())) {
+            log.error("Refusing {}: its {} host key ({}) is awaiting approval on the Host Keys screen",
+                    hostPort, offeredType, offeredFingerprint);
+            return NOT_INCLUDED;
+        }
+        return OK;
     }
 
     /**

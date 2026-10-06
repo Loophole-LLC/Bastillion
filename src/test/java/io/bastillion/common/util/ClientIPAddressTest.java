@@ -45,6 +45,30 @@ class ClientIPAddressTest {
     }
 
     @Test
+    void rejectsColonSoupThatIsNotAnAddress() {
+        // The previous pattern matched any run of hex digits and colons, so each of these was
+        // accepted and became its own throttle key and its own audit-log "IP".
+        assertNull(AuthUtil.firstForwardedAddress(":"));
+        assertNull(AuthUtil.firstForwardedAddress("::::::::"));
+        assertNull(AuthUtil.firstForwardedAddress("a:"));
+        assertNull(AuthUtil.firstForwardedAddress(":::"));
+    }
+
+    @Test
+    void acceptsARealLinkLocalAddressWithAZoneId() {
+        // "%" was not in the old character class, so these fell back to the TCP peer address
+        // despite being perfectly valid.
+        assertEquals("fe80::1%eth0", AuthUtil.firstForwardedAddress("fe80::1%eth0"));
+    }
+
+    @Test
+    void stillAcceptsOrdinaryIpv6Forms() {
+        assertEquals("2001:db8::1", AuthUtil.firstForwardedAddress("2001:db8::1"));
+        assertEquals("::1", AuthUtil.firstForwardedAddress("::1"));
+        assertEquals("2001:db8:0:0:0:0:0:1", AuthUtil.firstForwardedAddress("2001:db8:0:0:0:0:0:1"));
+    }
+
+    @Test
     void rejectsAValueThatIsNotAnAddress() {
         // Falls back to the TCP peer address rather than keying the throttle, or an audit
         // line, on arbitrary header text.

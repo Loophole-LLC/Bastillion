@@ -39,6 +39,10 @@ public class LoginThrottleUtil {
 
     private static final ConcurrentHashMap<String, Window> ATTEMPTS = new ConcurrentHashMap<>();
 
+    /** Guards the sweep so only one request pays for it at a time. */
+    private static final java.util.concurrent.atomic.AtomicBoolean EVICTING =
+            new java.util.concurrent.atomic.AtomicBoolean(false);
+
     private LoginThrottleUtil() {
     }
 
@@ -103,13 +107,30 @@ public class LoginThrottleUtil {
      * full of junk and then guess passwords from an untracked address.
      */
     private static void evictToMakeRoom() {
-        ATTEMPTS.values().removeIf(Window::isExpired);
-        if (ATTEMPTS.size() < MAX_TRACKED_IPS) {
+        // Only one caller gets in. Once the map is full every failed login from a new address
+        // reaches this, and a sweep plus a min() over MAX_TRACKED_IPS entries per request -
+        // synchronously, before the password check - makes the spray that filled the map
+        // cheaper for the attacker than for the server. Letting other callers past while one
+        // sweeps keeps the cost to the thread doing the work.
+        if (!EVICTING.compareAndSet(false, true)) {
             return;
         }
-        ATTEMPTS.entrySet().stream()
-                .min(Comparator.comparingLong(entry -> entry.getValue().windowStart))
-                .ifPresent(oldest -> ATTEMPTS.remove(oldest.getKey(), oldest.getValue()));
+        try {
+            ATTEMPTS.values().removeIf(Window::isExpired);
+            if (ATTEMPTS.size() < MAX_TRACKED_IPS) {
+                return;
+            }
+            // The sweep recovered nothing, so every window is live: more distinct addresses
+            // than the cap inside one window, which is the attack rather than ordinary use.
+            // Drop a batch so this is not paid again on the very next attempt.
+            ATTEMPTS.entrySet().stream()
+                    .sorted(Comparator.comparingLong(entry -> entry.getValue().windowStart))
+                    .limit(Math.max(1, MAX_TRACKED_IPS / 10))
+                    .toList()
+                    .forEach(oldest -> ATTEMPTS.remove(oldest.getKey(), oldest.getValue()));
+        } finally {
+            EVICTING.set(false);
+        }
     }
 
     /**

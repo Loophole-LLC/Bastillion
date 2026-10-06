@@ -65,6 +65,7 @@
                th:value="${sortedSet.orderByField}">
     </form>
     <h3>Manage Host Keys</h3>
+    <div th:replace="~{_res/inc/errors}"></div>
     <p>The SSH host key each system presented, and whether Bastillion will connect to it.
         A host whose key changes is refused until you decide the change was expected.</p>
 

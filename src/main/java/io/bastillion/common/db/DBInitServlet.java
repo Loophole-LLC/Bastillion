@@ -50,17 +50,6 @@ public class DBInitServlet extends jakarta.servlet.http.HttpServlet {
     private static final Logger log = LoggerFactory.getLogger(DBInitServlet.class);
 
     /**
-     * Bastillion's known_hosts - see io.bastillion.manage.util.HostKeyVerifier. One row per
-     * host, port and key type. The offered_* columns hold the key a host presented when it
-     * did not match the trusted one, so the two can be compared instead of the new key
-     * quietly replacing the approved one.
-     */
-    /**
-     * Bastillion's SSH certificate authority keypair - see
-     * io.bastillion.manage.util.SshCertificateUtil. One row per authority type; next_serial
-     * is the certificate serial counter sshd logs and a revocation list revokes against.
-     */
-    /**
      * Host certificate authorities Bastillion trusts - the fleet equivalent of a
      * {@code @cert-authority} line in known_hosts. A host presenting a certificate signed by
      * one of these needs no individual host key recorded or approved for it.
@@ -73,6 +62,11 @@ public class DBInitServlet extends jakarta.servlet.http.HttpServlet {
                     + "comment varchar, "
                     + "create_tm timestamp not null default CURRENT_TIMESTAMP())";
 
+    /**
+     * Bastillion's SSH certificate authority keypair - see
+     * io.bastillion.manage.util.SshCertificateUtil. One row per authority type; next_serial
+     * is the certificate serial counter sshd logs and a revocation list revokes against.
+     */
     private static final String CREATE_CERT_AUTHORITY_TABLE =
             "create table if not exists cert_authority ("
                     + "id INTEGER PRIMARY KEY AUTO_INCREMENT, "
@@ -82,6 +76,12 @@ public class DBInitServlet extends jakarta.servlet.http.HttpServlet {
                     + "create_tm timestamp not null default CURRENT_TIMESTAMP(), "
                     + "next_serial BIGINT not null default 0)";
 
+    /**
+     * Bastillion's known_hosts - see io.bastillion.manage.util.HostKeyVerifier. One row per
+     * host, port and key type. The offered_* columns hold the key a host presented when it
+     * did not match the trusted one, so the two can be compared instead of the new key
+     * quietly replacing the approved one.
+     */
     private static final String CREATE_HOST_KEY_TABLE =
             "create table if not exists host_key ("
                     + "id INTEGER PRIMARY KEY AUTO_INCREMENT, "

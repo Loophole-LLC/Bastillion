@@ -297,7 +297,7 @@ public class SSHUtil {
                     }
                     sb.append(key).append("\n");
                 }
-                sb.append(appPubKey);
+                sb.append(appPubKey).append("\n");
                 newKeys = sb.toString();
             } else {
                 // Key management off: leave whatever is already on the host alone and just
@@ -305,7 +305,7 @@ public class SSHUtil {
                 // content that is written straight back out, which is safe only because
                 // writeAuthorizedKeys uses SFTP rather than a shell command.
                 if (!existingKeys.contains(appPubKey))
-                    newKeys = existingKeys + "\n" + appPubKey;
+                    newKeys = appendKeyLine(existingKeys, appPubKey);
                 else newKeys = existingKeys;
             }
 
@@ -316,6 +316,24 @@ public class SSHUtil {
             log.error(ex.toString(), ex);
         }
         return hostSystem;
+    }
+
+    /**
+     * Appends one key as a line of its own to existing authorized_keys content.
+     * <p>
+     * Every line, including the last, ends with a newline. OpenSSH reads a final line without
+     * one perfectly well, but anything that later appends to the file - another configuration
+     * tool, or an administrator running {@code echo key >> authorized_keys} - would run its
+     * entry onto the end of Bastillion's, silently invalidating both. Coexisting with whatever
+     * else manages the file is the entire point of keyManagement=append, so the file is left
+     * in a state that is safe to append to.
+     */
+    static String appendKeyLine(String existingKeys, String key) {
+        StringBuilder sb = new StringBuilder(existingKeys);
+        if (!existingKeys.isEmpty() && !existingKeys.endsWith("\n")) {
+            sb.append("\n");
+        }
+        return sb.append(key).append("\n").toString();
     }
 
     /**
@@ -673,7 +691,10 @@ public class SSHUtil {
                 return hostSystem;
             }
             hostSystem.setErrorMsg(ex.getMessage());
-            String msg = ex.getMessage().toLowerCase();
+            // Null for a SocketTimeoutException, an InterruptedException, or any NPE raised
+            // without one - and this is the handler, so throwing here escapes the method
+            // entirely and turns a reportable failure into an HTTP 500.
+            String msg = StringUtils.trimToEmpty(ex.getMessage()).toLowerCase();
             if (msg.contains("userauth fail")) hostSystem.setStatusCd(HostSystem.PUBLIC_KEY_FAIL_STATUS);
             else if (msg.contains("auth fail") || msg.contains("auth cancel"))
                 hostSystem.setStatusCd(HostSystem.AUTH_FAIL_STATUS);

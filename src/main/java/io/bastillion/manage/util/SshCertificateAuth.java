@@ -194,7 +194,14 @@ public class SshCertificateAuth {
      */
     public static String unsupportedKeyTypeReason(String publicKey, String label) {
         String keyType = SSHUtil.getKeyType(publicKey);
-        if (keyType == null || SshCertificateUtil.ED25519_KEY_TYPE.equalsIgnoreCase("ssh-" + keyType)) {
+        if (keyType == null) {
+            // getKeyType returns null for a key JSch cannot load at all. Reading that as "no
+            // problem here" suppressed the startup warning this exists to emit and sent the
+            // per-system test off blaming a missing certificate authority.
+            return "The " + label + " could not be read, so no certificate can be issued for it. "
+                    + "Check that it is a valid Ed25519 public key.";
+        }
+        if (SshCertificateUtil.ED25519_KEY_TYPE.equalsIgnoreCase("ssh-" + keyType)) {
             return null;
         }
         return "The " + label + " is " + keyType + ", but certificates can only be issued for "

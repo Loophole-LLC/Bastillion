@@ -36,10 +36,16 @@ public class AuthUtil {
     private static final int MAX_IP_LITERAL_LENGTH = 45;
     private static final Pattern IPV4 = Pattern.compile(
             "(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)(\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)){3}");
-    // Permissive on IPv6 shape (hex groups, "::" elision and an optional embedded IPv4 tail)
-    // rather than enumerating every valid form - the point is to reject anything that is not
-    // an address literal, not to validate addressing.
-    private static final Pattern IPV6 = Pattern.compile("[0-9A-Fa-f:]*:[0-9A-Fa-f:]*(\\.[0-9]{1,3}){0,3}");
+    // Permissive on IPv6 shape rather than enumerating every valid form, but not so permissive
+    // that it stops doing its job: the previous expression matched any run of hex digits and
+    // colons, so ":", "::::::::" and "a:" all passed. With clientIPHeader set, that let a
+    // client mint a fresh throttle key - and a fresh audit-log "IP" - on every request, which
+    // is exactly what parsing the header was meant to stop. Requires at least two hex groups,
+    // allows the "::" elision, an embedded IPv4 tail, and a zone id, which the previous
+    // comment claimed was covered when "%" was not even in the character class.
+    private static final Pattern IPV6 = Pattern.compile(
+            "(?=.*[0-9A-Fa-f])[0-9A-Fa-f]{0,4}(:[0-9A-Fa-f]{0,4}){2,7}"
+                    + "(\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)){0,3}(%[0-9A-Za-z._-]{1,32})?");
 
     private AuthUtil() {
     }

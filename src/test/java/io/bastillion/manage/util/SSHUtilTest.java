@@ -240,11 +240,30 @@ class SSHUtilTest {
         return pubOut.toString();
     }
 
-    // --- isSafeAuthorizedKeysPath / isSafeKeyContent: guards against shell command
-    // injection in addPubKey, where these values are interpolated into "cat"/"echo"/"chmod"
-    // commands sent over the exec channel (see GitHub advisory - authorized_keys path and
+    // --- appendKeyLine: keyManagement=append shares authorized_keys with whatever else
+    // manages it, so the file it leaves behind has to be safe to append to ---
+
+    @Test
+    void appendKeyLineTerminatesTheFileSoTheNextAppendStartsItsOwnLine() {
+        assertEquals("existing-key\nnew-key\n", SSHUtil.appendKeyLine("existing-key\n", "new-key"));
+    }
+
+    @Test
+    void appendKeyLineSeparatesFromAnExistingFileThatHasNoFinalNewline() {
+        assertEquals("existing-key\nnew-key\n", SSHUtil.appendKeyLine("existing-key", "new-key"));
+    }
+
+    @Test
+    void appendKeyLineAddsNoBlankFirstLineWhenThereIsNoFileYet() {
+        assertEquals("new-key\n", SSHUtil.appendKeyLine("", "new-key"));
+    }
+
+    // --- isSafeAuthorizedKeysPath / isSafeKeyContent: originally guards against shell
+    // command injection in addPubKey, which interpolated these values into "cat"/"echo"/
+    // "chmod" commands on an exec channel (see GitHub advisory - the authorized_keys path and
     // public key content are both attacker-reachable, one via the system form, one via a
-    // pasted/uploaded public key comment) ---
+    // pasted/uploaded public key comment). addPubKey now uses SFTP, so no shell parses
+    // either one; they are kept, and still tested, as input validation ---
 
     @Test
     void isSafeAuthorizedKeysPathAcceptsOrdinaryPaths() {

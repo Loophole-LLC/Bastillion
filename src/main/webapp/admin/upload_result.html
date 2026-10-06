@@ -37,11 +37,11 @@
                     container.scrollTop(scrollTo.offset() - container.offset() + container.scrollTop() - 55);
                 [/]
 
-                [# th:if="${currentSystemStatus!=null && #strings.equals(currentSystemStatus.statusCd,'GENERICFAIL')}"]
+                [# th:if="${currentSystemStatus!=null && (#strings.equals(currentSystemStatus.statusCd,'GENERICFAIL') || #strings.equals(currentSystemStatus.statusCd,'HOSTKEYFAIL'))}"]
                     new bootstrap.Modal($("#error_dialog")).show();
                 [/]
 
-                [# th:if="${(currentSystemStatus == null || !#strings.equals(currentSystemStatus.statusCd,'GENERICFAIL')) && pendingSystemStatus != null && pendingSystemStatus.id != null}"]
+                [# th:if="${(currentSystemStatus == null || (!#strings.equals(currentSystemStatus.statusCd,'GENERICFAIL') && !#strings.equals(currentSystemStatus.statusCd,'HOSTKEYFAIL'))) && pendingSystemStatus != null && pendingSystemStatus.id != null}"]
                     $('#push').submit();
                 [/]
             });
@@ -80,6 +80,7 @@
                 <div class="warning" th:if="${#strings.equals(system.statusCd,'KEYAUTHFAIL')}">Passphrase
                     Authentication Failed
                 </div>
+                <div class="error" th:if="${#strings.equals(system.statusCd,'HOSTKEYFAIL')}">Host key refused</div>
                 <div class="error" th:if="${#strings.equals(system.statusCd,'GENERICFAIL')}">Failed</div>
                 <div class="success" th:if="${#strings.equals(system.statusCd,'SUCCESS')}">Success</div>
             </td>

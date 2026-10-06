@@ -198,7 +198,8 @@ public class AuthKeysKtrl extends BaseKontroller {
 
             if (StringUtils.isNotEmpty(publicKey.getKeyNm()) && StringUtils.isNotEmpty(privateKey)) {
                 getResponse().setContentType("application/octet-stream");
-                getResponse().setHeader("Content-Disposition", "attachment;filename=" + publicKey.getKeyNm() + ".key");
+                getResponse().setHeader("Content-Disposition",
+                        "attachment;filename=" + keyFileBase(publicKey.getKeyNm()) + ".key");
                 try (OutputStream out = getResponse().getOutputStream()) {
                     out.write(privateKey.getBytes());
                     out.flush();
@@ -269,14 +270,21 @@ public class AuthKeysKtrl extends BaseKontroller {
     }
 
     /**
-     * OpenSSH loads a certificate from "&lt;identity file&gt;-cert.pub", so the name has to be
-     * built from whatever the private key was downloaded as - which downloadPvtKey names
-     * "&lt;key name&gt;.key". Naming this "&lt;key name&gt;-cert.pub" instead would leave the
-     * two files sitting next to each other with ssh quietly ignoring the certificate.
+     * The download filename stem for a key, from its user-chosen name.
+     * <p>
+     * Restricted to characters that are safe in a filename and in a header: the name comes
+     * from the user, and it was being put into Content-Disposition raw, so a newline in it
+     * split the response headers. It also has to be the same stem for both downloads, because
+     * OpenSSH loads a certificate from "&lt;identity file&gt;-cert.pub" - sanitizing one and
+     * not the other left "alice laptop.key" beside "alice_laptop.key-cert.pub", which ssh
+     * silently ignores.
      */
+    private static String keyFileBase(String keyName) {
+        return StringUtils.isBlank(keyName) ? "id_ed25519" : keyName.replaceAll("[^A-Za-z0-9_.-]", "_");
+    }
+
     private static String certificateFileName(String keyName) {
-        String base = StringUtils.isBlank(keyName) ? "id_ed25519" : keyName.replaceAll("[^A-Za-z0-9_.-]", "_");
-        return base + ".key-cert.pub";
+        return keyFileBase(keyName) + ".key-cert.pub";
     }
 
     /* ------------------------- Validation ------------------------- */

@@ -118,7 +118,16 @@ public class CertAuthorityDB {
                         "select next_serial from cert_authority where type = ?")) {
                     stmt.setString(1, type);
                     try (ResultSet rs = stmt.executeQuery()) {
-                        long serial = rs.next() ? rs.getLong(1) : 1L;
+                        if (!rs.next()) {
+                            // No row of this type, so the UPDATE above matched nothing.
+                            // Returning 1 here would have issued every certificate with the
+                            // same serial - the thing sshd logs and a revocation list revokes
+                            // against - and reported it as success.
+                            con.rollback();
+                            throw new SQLException("No " + type + " certificate authority to "
+                                    + "allocate a serial from");
+                        }
+                        long serial = rs.getLong(1);
                         con.commit();
                         return serial;
                     }
