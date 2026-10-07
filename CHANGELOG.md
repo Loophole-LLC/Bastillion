@@ -52,7 +52,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `com.h2database:h2` 2.4.240 → 2.5.252
 - `org.bouncycastle:bcprov-jdk18on` 1.85.2 → 1.86
 - `org.apache.commons:commons-lang3` 3.20.0 → 3.21.0
-- `org.eclipse.jetty:*` 12.1.12 → 12.1.13
+- `org.eclipse.jetty:*` 12.1.12 → 12.1.14
 - `org.slf4j:slf4j-api` 2.0.18 → 2.0.20
 
 **Upgrade note:** the new tables and columns are created on first start and need no action — upgrading from 5.2.x has been tested end to end. Host key verification defaults to `accept-new`, so existing systems keep connecting and their keys are recorded as they are first seen; set `hostKeyVerification=strict` to require approval instead, or `off` to keep the pre-6.0.0 behavior. The certificate authority is off until `sshCertificateAuth` is set. `keyManagementEnabled=true`/`false` is still honored and maps to `manage`/`append`.

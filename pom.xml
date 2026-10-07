@@ -196,12 +196,12 @@
         <dependency>
             <groupId>org.eclipse.jetty</groupId>
             <artifactId>jetty-server</artifactId>
-            <version>12.1.13</version>
+            <version>12.1.14</version>
         </dependency>
         <dependency>
             <groupId>org.eclipse.jetty.ee10</groupId>
             <artifactId>jetty-ee10-webapp</artifactId>
-            <version>12.1.13</version>
+            <version>12.1.14</version>
         </dependency>
         <!-- JAAS LoginModule SPI (LdapLoginModule, AbstractLoginModule, ObjectCallback) used
              directly by ExternalAuthUtil - Jetty 12 dropped the standalone jetty-jaas
@@ -210,12 +210,12 @@
         <dependency>
             <groupId>org.eclipse.jetty</groupId>
             <artifactId>jetty-security</artifactId>
-            <version>12.1.13</version>
+            <version>12.1.14</version>
         </dependency>
         <dependency>
             <groupId>org.eclipse.jetty.ee10.websocket</groupId>
             <artifactId>jetty-ee10-websocket-jakarta-server</artifactId>
-            <version>12.1.13</version>
+            <version>12.1.14</version>
         </dependency>
 
         <!-- Jakarta Servlet API (EE10 - jetty-ee10-webapp pulls this in transitively, but it's
