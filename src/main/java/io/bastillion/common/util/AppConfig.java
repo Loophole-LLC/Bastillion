@@ -166,10 +166,16 @@ public class AppConfig {
         }
 
         // First check environment variables: exact name, then camelCase converted to
-        // SCREAMING_SNAKE_CASE (licenseKey -> LICENSE_KEY, dbUser -> DB_USER, ...)
+        // SCREAMING_SNAKE_CASE (licenseKey -> LICENSE_KEY, dbUser -> DB_USER, ...), then the
+        // same with acronyms split off the word that follows them, which is how anyone
+        // actually writes them (defaultSSHPassphrase -> DEFAULT_SSH_PASSPHRASE).
         String property = System.getenv(name);
         if (StringUtils.isEmpty(property)) {
             property = System.getenv(toScreamingSnakeCase(name));
+        }
+        if (StringUtils.isEmpty(property)) {
+            String acronymAware = toScreamingSnakeCaseSplittingAcronyms(name);
+            property = System.getenv(acronymAware);
         }
 
         // Fallback to properties file, then to the bundled defaults
@@ -186,9 +192,32 @@ public class AppConfig {
     /**
      * Converts a camelCase property name to the SCREAMING_SNAKE_CASE convention used for
      * its environment variable override, e.g. licenseKey -> LICENSE_KEY, dbUser -> DB_USER.
+     * <p>
+     * A run of capitals stays glued to whatever follows it, so defaultSSHPassphrase becomes
+     * DEFAULT_SSHPASSPHRASE rather than DEFAULT_SSH_PASSPHRASE. That is the historical name
+     * and is still accepted; {@link #toScreamingSnakeCaseSplittingAcronyms} produces the one
+     * an operator would actually guess, and both are looked up.
      */
     static String toScreamingSnakeCase(String camelCase) {
         return camelCase.replaceAll("([a-z0-9])([A-Z])", "$1_$2").toUpperCase();
+    }
+
+    /**
+     * As {@link #toScreamingSnakeCase}, but also breaks a run of capitals away from the word
+     * it runs into: defaultSSHPassphrase -> DEFAULT_SSH_PASSPHRASE, clientIPHeader ->
+     * CLIENT_IP_HEADER, resetApplicationSSHKey -> RESET_APPLICATION_SSH_KEY.
+     * <p>
+     * Both spellings are accepted because the documented name and the derived one had drifted
+     * apart: the README told operators to export DEFAULT_SSH_PASSPHRASE and
+     * RESET_APPLICATION_SSH_KEY, neither of which the single rule above produces, so those
+     * settings were read from the properties file as though never set. Silently ignoring a
+     * configured passphrase or key reset is worse than either spelling being wrong.
+     */
+    static String toScreamingSnakeCaseSplittingAcronyms(String camelCase) {
+        return camelCase
+                .replaceAll("([A-Z]+)([A-Z][a-z])", "$1_$2")
+                .replaceAll("([a-z0-9])([A-Z])", "$1_$2")
+                .toUpperCase();
     }
 
     public static String getProperty(String name, String defaultValue) {

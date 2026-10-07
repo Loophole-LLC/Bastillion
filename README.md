@@ -317,10 +317,10 @@ then uppercase it: `licenseKey` → `LICENSE_KEY`, `dbUser` → `DB_USER`, `sshK
 `SSH_KEY_TYPE`. This is the recommended way to configure Bastillion, especially in
 containers — no file to mount or bake in.
 
-Note the "follows a lowercase letter or digit" part: a run of capitals stays together, so
-`clientIPHeader` → `CLIENT_IPHEADER` (not `CLIENT_IP_HEADER`) and `maxLoginAttemptsPerIP` →
-`MAX_LOGIN_ATTEMPTS_PER_IP`. Each block below spells out the variable for every setting, so
-you shouldn't need to apply the rule by hand.
+Where a property contains a run of capitals, either spelling is accepted: `clientIPHeader`
+can be set as `CLIENT_IP_HEADER` or `CLIENT_IPHEADER`, and `defaultSSHPassphrase` as
+`DEFAULT_SSH_PASSPHRASE` or `DEFAULT_SSHPASSPHRASE`. Each block below spells out the
+variable for every setting, so you shouldn't need to apply the rule by hand.
 
 `BastillionConfig.properties` still works as a fallback (env vars always win if both are
 set), and is where any value Bastillion generates for you at first startup — like a random
@@ -612,7 +612,7 @@ export MAX_THROTTLED_IPS=20000
 # Header to trust for the client IP (e.g. X-Forwarded-For). Only set this behind a reverse
 # proxy that writes the header itself - trusting a client-suppliable header without one lets
 # an attacker vary it freely and bypass the throttle.
-export CLIENT_IPHEADER=
+export CLIENT_IP_HEADER=
 ```
 </details>
 

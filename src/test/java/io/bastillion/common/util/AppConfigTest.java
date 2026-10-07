@@ -13,6 +13,37 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AppConfigTest {
 
     @Test
+    void toScreamingSnakeCaseSplittingAcronymsProducesTheNameOperatorsActuallyWrite() {
+        // The single-rule conversion glues a run of capitals to the word after it, so the
+        // names the README documents - and that anyone would guess - did not resolve at all.
+        assertEquals("DEFAULT_SSH_PASSPHRASE",
+                AppConfig.toScreamingSnakeCaseSplittingAcronyms("defaultSSHPassphrase"));
+        assertEquals("RESET_APPLICATION_SSH_KEY",
+                AppConfig.toScreamingSnakeCaseSplittingAcronyms("resetApplicationSSHKey"));
+        assertEquals("CLIENT_IP_HEADER",
+                AppConfig.toScreamingSnakeCaseSplittingAcronyms("clientIPHeader"));
+    }
+
+    @Test
+    void toScreamingSnakeCaseSplittingAcronymsLeavesOrdinaryNamesAlone() {
+        assertEquals("LICENSE_KEY", AppConfig.toScreamingSnakeCaseSplittingAcronyms("licenseKey"));
+        assertEquals("DB_USER", AppConfig.toScreamingSnakeCaseSplittingAcronyms("dbUser"));
+        assertEquals("SSH_KEY_TYPE", AppConfig.toScreamingSnakeCaseSplittingAcronyms("sshKeyType"));
+        assertEquals("MAX_LOGIN_ATTEMPTS_PER_IP",
+                AppConfig.toScreamingSnakeCaseSplittingAcronyms("maxLoginAttemptsPerIP"));
+        assertEquals("A", AppConfig.toScreamingSnakeCaseSplittingAcronyms("a"));
+    }
+
+    @Test
+    void bothEnvVarSpellingsStayDistinctWhereAcronymsAreInvolved() {
+        // The historical spelling is still accepted, so an operator who already set it keeps
+        // working; these are the two names getProperty looks up.
+        assertEquals("DEFAULT_SSHPASSPHRASE", AppConfig.toScreamingSnakeCase("defaultSSHPassphrase"));
+        assertEquals("DEFAULT_SSH_PASSPHRASE",
+                AppConfig.toScreamingSnakeCaseSplittingAcronyms("defaultSSHPassphrase"));
+    }
+
+    @Test
     void toScreamingSnakeCaseConvertsCamelCase() {
         assertEquals("LICENSE_KEY", AppConfig.toScreamingSnakeCase("licenseKey"));
         assertEquals("DB_USER", AppConfig.toScreamingSnakeCase("dbUser"));
