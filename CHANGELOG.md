@@ -4,6 +4,58 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [6.0.0]
+
+### Security
+
+- **High: SSH sessions never verified host keys.** Every connection was opened with `StrictHostKeyChecking=no`, which does not mean "warn" — the key a host presents was never compared to anything. A bastion is the worst place for that: it hands the host the application private key, and on an authentication fallback the user's own password or key passphrase, so anything that could answer on a managed system's address once could collect credentials for it. Host keys are now verified against a new `host_key` table, with the mode set by `hostKeyVerification`: `accept-new` (default) records a key on first sight and refuses the connection if it ever changes, `strict` additionally requires a manager to approve each new host key, and `off` restores the old behavior.
+- **Request parameters could rewrite the application SSH public key shown to every user.** `BaseKontroller` bound parameters into static fields, and `UserSettingsKtrl` holds the application public key in a static `@Model` field — so `?publicKey=...` rewrote the key displayed on the page that tells users to install it in their `authorized_keys`, for everyone. `?themeMap['x']=y` likewise grew a shared map without bound. Reachable by any authenticated user. The binder now refuses static fields and the palettes are unmodifiable.
+- **Any third-party page could end every signed-in user's session.** `CSRFFilter` invalidated the session on a token mismatch, an absent token failed identically, and the filter covers page GETs — so `<img src="https://host/admin/menu.html">` on an unrelated site logged out whoever loaded it. No token knowledge and nothing forged. The request is still refused; the session now survives being targeted.
+- **The user list could be sorted by its password column.** `SortedSet` filtered characters rather than column names and the result was concatenated into `order by`, so `?sortedSet.orderByField=password` leaked the relative order of every stored hash, with no quoting or metacharacter needed. Each query now declares its sortable columns and an unrecognized field drops the clause.
+- **Fabricated "Authentication Success" records could be written to the login audit log.** The log is one record per line, assembled from the submitted username, which needs no credentials to set — a newline in it appended records of the attacker's choosing. `AuditLogUtil.safe` now strips control characters and caps field length.
+- **A downloaded private key could be unencrypted while the UI said otherwise.** `rewrapWithOpenSSHKeygen` discarded `ssh-keygen`'s exit status and returned the temp file regardless; on failure `ssh-keygen` leaves that file untouched, so the method returned the plaintext PEM it was handed. It now checks the exit status and verifies the result really is encrypted by reading the `openssh-key-v1` cipher name, drains output before waiting, closes the child's stdin, and applies a timeout.
+- **A key name could inject HTTP response headers.** Key names are user-supplied and went into `Content-Disposition` unescaped on both the private key and certificate downloads. Both now derive the filename through one sanitizer.
+- **`authorized_keys` was rewritten through a shell command.** `addPubKey` built `echo '<keys>' > file` and interpolated the host's existing file contents unvalidated, so an apostrophe already in that file — legal, and common in a key comment — closed the quoting. Replaced with SFTP: no shell on either end, so the bug class is gone rather than filtered.
+- **The login throttle could be filled with junk to disable it.** `getClientIPAddress` used the whole forwarded-for header as the throttle key, but each hop appends to it, so a client-varied prefix made every request its own entry. It now takes the first address and requires it to parse as an IP literal, and the map is bounded, sweeping expired windows and evicting the oldest in one guarded batch.
+- **Removed `X-XSS-Protection`.** It drove the XSS Auditor, which Chrome and Edge removed and Firefox and Safari never shipped, and while live `1; mode=block` was itself usable to disable scripts selectively and to leak cross-site information. HSTS moves to `SecurityHeadersFilter`, where `max-age`, `includeSubDomains` and `preload` are configurable — the latter two off by default, because a browser that cached them refuses plain HTTP to those names for the whole max-age.
+- Public key lookups behind the download endpoints now scope ownership in SQL rather than after the fact, and certificate serial numbers fail loudly instead of restarting at 1 when the authority row is missing.
+
+### Added
+
+- **An SSH certificate authority.** Bastillion can sign short-lived OpenSSH certificates instead of relying solely on distributed `authorized_keys`, enabled with `sshCertificateAuth`. The CA private key is generated on first start and never leaves the database — certificates are built and signed in-process rather than by shelling out to `ssh-keygen -s`.
+  - Sessions to managed systems authenticate with a certificate carrying the Bastillion username as its key id, so the target host's own logs name the person behind the connection. Default lifetime 5 minutes (`sshCertificateValiditySeconds`).
+  - Users can download a certificate for their own registered key and use their own SSH client directly, no longer only the browser terminal. Default lifetime 8 hours (`sshUserCertificateValiditySeconds`).
+  - Host certificates are trusted by registering a host CA, published to the verifier as `@cert-authority`, with revoked keys published as `@revoked`.
+  - The CA public key is shown and downloadable from user settings, for installing as `TrustedUserCAKeys` on managed hosts.
+  - Each system has a **Test cert** action that opens a throwaway connection with a certificate and reports whether the host accepted it, without touching the system's recorded status.
+- **A Host Keys screen**, listing every key Bastillion has seen with its fingerprint and when it was first trusted, with approve, revoke and forget actions, plus a navigation badge counting keys currently blocking connections.
+- **`keyManagement`**, replacing the old boolean `keyManagementEnabled` with three modes: `manage` (Bastillion owns `authorized_keys`, as before), `append` (add Bastillion's key and leave everything else on the host alone), and `off` (never write to `authorized_keys` at all, for installs authenticating purely by certificate).
+- **An Auth column** on the systems screen, showing whether the host accepted a certificate, a key, or a password on the last connection — read back from what the host actually accepted, not from what was offered.
+- A `HOSTKEYFAIL` status distinct from a generic failure, since a refused host key needs a specific human decision rather than looking like a dead port or a bad password.
+- Copy-to-clipboard on the public key and CA fields, and a startup warning when a certificate lifetime is long enough to outlive revocation.
+
+### Changed
+
+- `authorized_keys` is written over SFTP via a staged write and a rename, rather than streamed over the top of the existing file. A connection lost part way used to leave a half-written or empty file — and in `manage` mode that file is rewritten unattended on every host by the refresh timer, so losing it took the application key with it and locked everyone out of that host. The host now has either the old file or the new one, and the file always ends with a newline so anything else appending to it starts its own line.
+- With certificates enabled, the application key is offered as a second identity behind the certificate. Offering the certificate alone cut off every host that had not had `TrustedUserCAKeys` configured yet — including hosts with the key already in their `authorized_keys` — which stranded the operator, the refresh timer being how Bastillion reaches a host to manage it in the first place. Rollout is now incremental: a host takes the certificate once it trusts the CA and keeps working on its key until then.
+- The RSA default key length is 4096 rather than falling back to a short length when `sshKeyLength` is unset or not valid for the key type.
+
+### Fixed
+
+- The certificate download refused every request, `getPublicKey(id)` never having populated the owning user id it was checked against.
+- A failure with no message rendered as a literal `Error: null` in the systems screen's dialogs.
+- Distributing a user's key no longer reports success when the write was skipped, and the application key being uncertifiable is now stated rather than silently falling back.
+
+### Dependencies
+
+- `com.h2database:h2` 2.4.240 → 2.5.252
+- `org.bouncycastle:bcprov-jdk18on` 1.85.2 → 1.86
+- `org.apache.commons:commons-lang3` 3.20.0 → 3.21.0
+- `org.eclipse.jetty:*` 12.1.12 → 12.1.13
+- `org.slf4j:slf4j-api` 2.0.18 → 2.0.20
+
+**Upgrade note:** the new tables and columns are created on first start and need no action — upgrading from 5.2.x has been tested end to end. Host key verification defaults to `accept-new`, so existing systems keep connecting and their keys are recorded as they are first seen; set `hostKeyVerification=strict` to require approval instead, or `off` to keep the pre-6.0.0 behavior. The certificate authority is off until `sshCertificateAuth` is set. `keyManagementEnabled=true`/`false` is still honored and maps to `manage`/`append`.
+
 ## [5.2.1]
 
 ### Security
