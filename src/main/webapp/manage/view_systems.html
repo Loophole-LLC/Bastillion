@@ -381,7 +381,8 @@
                 </div>
                 <div class="modal-body">
                     <div class="row">
-                        <div class="error" th:text="'Error: ' + ${hostSystem.errorMsg}"></div>
+                        <div class="error" th:if="${hostSystem.errorMsg != null}"
+                             th:text="'Error: ' + ${hostSystem.errorMsg}"></div>
                         <form th:action="@{/manage/saveSystem.ktrl}" method="post" id="password_frm">
                             <input type="hidden" name="_csrf" th:value="${session._csrf}">
                             <input type="hidden" name="hostSystem.id" th:value="${hostSystem.id}">
@@ -424,7 +425,8 @@
                 </div>
                 <div class="modal-body">
                     <div class="row">
-                        <div class="error" th:text="'Error: ' + ${hostSystem.errorMsg}"></div>
+                        <div class="error" th:if="${hostSystem.errorMsg != null}"
+                             th:text="'Error: ' + ${hostSystem.errorMsg}"></div>
                         <form th:action="@{/manage/saveSystem.ktrl}" method="post" id="passphrase_frm">
                             <input type="hidden" name="_csrf" th:value="${session._csrf}">
                             <input type="hidden" name="hostSystem.id" th:value="${hostSystem.id}">
@@ -466,7 +468,8 @@
                 </div>
                 <div class="modal-body">
                     <div class="row">
-                        <div class="error" th:text="'Error: ' + ${hostSystem.errorMsg}"></div>
+                        <div class="error" th:if="${hostSystem.errorMsg != null}"
+                             th:text="'Error: ' + ${hostSystem.errorMsg}"></div>
                         <form id="error_frm">
                             <input type="hidden" name="_csrf" th:value="${session._csrf}">
                             <input type="hidden" name="hostSystem.id" th:value="${hostSystem.id}">
