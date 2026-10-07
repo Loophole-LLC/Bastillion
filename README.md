@@ -152,7 +152,7 @@ default (`deleteAuditLogAfter`), and recording can be switched off with
 - Runs as a **self-contained jar** (`java -jar`) with HTTPS out of the box — see [Download and Run](#download-and-run)
 - Upgraded to **Java 21**, **Jetty 12**, and **Jakarta EE 10**
 - Full support for **Ed25519** (default) and **Ed448** SSH keys
-- **v4 → v5 migration tool** to bring over users, systems, keys, and audit logs from an existing instance — see [`tools/migrate`](tools/migrate/README.md)
+- **v4 migration tool** to bring over users, systems, keys, and audit logs from an existing v4 instance — imports straight into 6.x, with no interim 5.x install — see [`tools/migrate`](tools/migrate/README.md)
 - Hardened with a **CSRF filter** and app-wide **security headers**
 
 ---
@@ -234,7 +234,7 @@ Build and run (packages a self-contained jar with an embedded Jetty server — s
 `io.bastillion.Main` — and runs it):
 ```bash
 mvn package
-java -jar target/bastillion-5.0.0-SNAPSHOT.jar
+java -jar target/bastillion-6.0.0.jar
 ```
 
 Or for local dev without repackaging on every change:
@@ -842,9 +842,13 @@ Upgrading from an old Bastillion v4 install and want to keep your users, systems
 scripts, and (most importantly) the application's existing SSH keypair instead of starting
 over? `tools/migrate/` has a standalone migration tool for exactly that — it exports every
 table from the old H2 database (decrypting the app-level-encrypted columns with the OLD
-instance's keystore) to a JSON file, then imports it into a fresh v5 instance (re-encrypting
+instance's keystore) to a JSON file, then imports it into a fresh instance (re-encrypting
 with the NEW instance's keystore). Existing users can log in with their current passwords
 immediately after — no forced resets.
+
+Import straight into 6.x — there is no need to stand up a 5.x install first. Every column
+the v4 export carries still exists in the 6.x schema, and the columns 6.x adds take their
+defaults.
 
 ```bash
 cd tools/migrate
@@ -852,11 +856,11 @@ cd tools/migrate
 # 1. Export the old database
 ./migrate.sh export /opt/Bastillion-jetty/jetty/bastillion/WEB-INF/classes/ ~/bastillion-export.json
 
-# 2. Start the new v5 instance once against the config dir you're migrating into, then
+# 2. Start the new instance once against the config dir you're migrating into, then
 #    stop it (Ctrl+C) once it's finished booting - this creates the schema, jceks, and
 #    default admin user.
 cd ../..
-java -DCONFIG_DIR=/data/bastillion/ -jar target/bastillion-5.0.0-SNAPSHOT.jar
+java -DCONFIG_DIR=/data/bastillion/ -jar target/bastillion-6.0.0.jar
 
 # 3. Import into the new database (full replace of all 12 tables)
 cd tools/migrate

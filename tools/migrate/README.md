@@ -1,8 +1,13 @@
-# Bastillion v4 -> v5 H2 database migration tool
+# Bastillion v4 H2 database migration tool
 
 Migrates all data (users, systems, profiles, scripts, public keys, audit logs, and the
 Bastillion SSH application key/identity) from an old Bastillion H2 database into a new
-Bastillion v5 instance's H2 database.
+Bastillion instance's H2 database.
+
+Import straight into 6.x: there is no need to install 5.x first. Every column a v4 export
+carries still exists in the 6.x schema, and the columns 6.x adds (`user_theme.ui_theme`,
+`system.last_auth_method`) take their default or null, since the importer names the columns
+it found in the export.
 
 This is a **standalone Maven project**: it has its own `pom.xml` and isn't a module of
 Bastillion's own build, and it doesn't depend on Bastillion's build artifact at all. It
@@ -55,10 +60,10 @@ cd tools/migrate
 
 # 2. Start the new Bastillion once against the config dir you're migrating into, then stop
 #    it (Ctrl+C) once it has finished booting - this creates the schema + jceks + default
-#    admin. From the v5 repo root, packaged jar shown here (mvn compile exec:java -DCONFIG_DIR=
+#    admin. From the repo root, packaged jar shown here (mvn compile exec:java -DCONFIG_DIR=
 #    works the same way for a source checkout):
 cd ../..
-java -DCONFIG_DIR=/data/bastillion/ -jar target/bastillion-5.0.0-SNAPSHOT.jar
+java -DCONFIG_DIR=/data/bastillion/ -jar target/bastillion-6.0.0.jar
 
 # 3. Import into the new database (full replace of all 12 tables) - <new-config-dir> first,
 #    then the export file:
@@ -82,7 +87,7 @@ application SSH key pair (`application_key`), which is migrated rather than rege
 the remote hosts' `authorized_keys` entries (authorized against the old public key) keep
 working without any changes on those hosts.
 
-Password hashes and salts are copied as-is (not re-hashed) - Bastillion v5's `verifyHash()`
+Password hashes and salts are copied as-is (not re-hashed) - Bastillion's `verifyHash()`
 supports the newer PBKDF2 format, its own pre-PBKDF2 single-round SHA-256 format, and a real
 v4 database's single-round SHA-256 format (v4 concatenates the password and salt into one
 string before hashing, rather than digesting them separately), so old users can log in

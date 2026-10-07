@@ -1,5 +1,5 @@
 #!/bin/bash
-# Bastillion v4 -> v5 H2 database migration utility.
+# Bastillion v4 H2 database migration utility (imports into v5 or v6).
 #
 # Usage:
 #   ./migrate.sh export <old-config-dir> <output-json-file>
