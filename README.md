@@ -484,16 +484,22 @@ export SSH_CERTIFICATE_AUTH=on
 export SSH_CERTIFICATE_VALIDITY_SECONDS=300
 ```
 
-**Every managed system must be told to trust the authority first**, or enabling this will
-fail every connection. Bastillion generates its own Ed25519 certificate authority on first
-startup and prints the public key to the console; **Settings** shows it too, with these steps,
-a copy button and a `bastillion_ca.pub` download. On each host, as root:
+**Each managed system has to be told to trust the authority** before it will accept a
+certificate. Bastillion generates its own Ed25519 certificate authority on first startup and
+prints the public key to the console; **Settings** shows it too, with these steps, a copy
+button and a `bastillion_ca.pub` download. On each host, as root:
 
 ```bash
 cp bastillion_ca.pub /etc/ssh/bastillion_ca.pub
 echo 'TrustedUserCAKeys /etc/ssh/bastillion_ca.pub' >> /etc/ssh/sshd_config
 systemctl reload sshd
 ```
+
+You can do this host by host after switching certificates on, rather than all of it first.
+The application key is still offered behind the certificate, so a host that does not trust
+the CA yet keeps authenticating exactly as it did before — provided key management is still
+leaving that key in its `authorized_keys`. The **Auth** column on the systems screen shows
+which of the two each host actually accepted, so you can watch a rollout land.
 
 ⚠️ That needs **root on each host**, which pushing to `authorized_keys` does not. This is an
 alternative to key distribution for fleets you configure centrally, not a drop-in

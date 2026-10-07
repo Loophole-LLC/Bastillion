@@ -474,7 +474,7 @@ public class SSHUtil {
             if (StringUtils.isBlank(passphrase)) passphrase = appKey.getPassphrase();
             if (passphrase == null) passphrase = "";
 
-            String publicKeyCredential = addApplicationIdentity(jsch, appKey, passphrase, hostSystem, usernameFor(userId));
+            String singleCredential = addApplicationIdentity(jsch, appKey, passphrase, hostSystem, usernameFor(userId));
 
             Session session = jsch.getSession(hostSystem.getUser(), hostSystem.getHost(), hostSystem.getPort());
             if (StringUtils.isNotBlank(password)) session.setPassword(password.getBytes(StandardCharsets.UTF_8));
@@ -485,7 +485,8 @@ public class SSHUtil {
             session.setLogger(authMethodLogger);
             session.connect(SESSION_TIMEOUT);
 
-            recordAuthMethod(hostSystem, authMethodFor(publicKeyCredential, authMethodLogger.accepted()));
+            recordAuthMethod(hostSystem, authMethodFor(singleCredential,
+                    authMethodLogger.acceptedMethod(), authMethodLogger.acceptedAlgorithm()));
 
             ChannelShell channel = (ChannelShell) session.openChannel("shell");
             channel.setPtyType("xterm");
@@ -574,20 +575,37 @@ public class SSHUtil {
      * certificate-aware identity when it finds a certificate there rather than a plain key.
      * The private key is the same either way - a certificate attests to a key, it does not
      * replace one.
+     * <p>
+     * With certificates on, the plain key is offered as well, as a second identity behind the
+     * certificate. Offering only the certificate meant that turning sshCertificateAuth on cut
+     * off every host that had not had TrustedUserCAKeys configured yet - including hosts with
+     * the application key already sitting in their authorized_keys, which authenticated
+     * perfectly well the moment before. That strands an operator: the refresh timer is how
+     * Bastillion reaches a host to manage it, so the connection needed to roll the CA out is
+     * the one that breaks first. Offering both makes the rollout incremental - a host takes
+     * the certificate once it trusts the CA, and keeps working on its key until then - and
+     * grants no trust that was not already there, the key being in authorized_keys already.
+     * <p>
+     * Returns the credential to attribute a publickey success to when only one was offered,
+     * and null when both were, in which case nothing but the accepted algorithm can tell them
+     * apart (see {@link #authMethodFor}).
      */
     private static String addApplicationIdentity(JSch jsch, ApplicationKey appKey, String passphrase,
                                                  HostSystem hostSystem, String username) throws JSchException {
         String certificate = SshCertificateAuth.certificateFor(hostSystem, username);
-        byte[] publicCredential = certificate != null
-                ? certificate.getBytes(StandardCharsets.UTF_8)
-                : appKey.getPublicKey().getBytes();
+        byte[] privateKey = appKey.getPrivateKey().trim().getBytes();
 
-        jsch.addIdentity(appKey.getId().toString(),
-                appKey.getPrivateKey().trim().getBytes(),
-                publicCredential,
-                passphrase.getBytes());
+        if (certificate != null) {
+            // Added first, so JSch offers it first and a host that trusts the CA never falls
+            // back to the key. JSch keys identities by public key blob rather than by name,
+            // so the certificate and the key it attests to are two distinct identities.
+            jsch.addIdentity(appKey.getId() + "-cert", privateKey,
+                    certificate.getBytes(StandardCharsets.UTF_8), passphrase.getBytes());
+        }
+        jsch.addIdentity(appKey.getId().toString(), privateKey,
+                appKey.getPublicKey().getBytes(), passphrase.getBytes());
 
-        return certificate != null ? HostSystem.AUTH_METHOD_CERTIFICATE : HostSystem.AUTH_METHOD_KEY;
+        return certificate != null ? null : HostSystem.AUTH_METHOD_KEY;
     }
 
     /**
@@ -602,16 +620,22 @@ public class SSHUtil {
      * question is precisely whether the host took the certificate or quietly fell back.
      * <p>
      * JSch logs {@code "Authentication succeeded (<method>)."} at info once the method
-     * completes, so that line is the answer. Everything else is passed through to whatever
-     * logger was already in place, so attaching this costs no logging.
+     * completes, so that line is the answer. It also logs {@code "<algorithm> auth success"}
+     * at debug, which is what distinguishes the certificate from the key it attests to when
+     * both are offered as publickey identities - the method name is "publickey" either way.
+     * Everything else is passed through to whatever logger was already in place, so attaching
+     * this costs no logging; it does mean JSch builds its debug messages for these sessions,
+     * which is a handful of strings per connection.
      */
     static final class AcceptedAuthMethodLogger implements com.jcraft.jsch.Logger {
 
-        private static final String PREFIX = "Authentication succeeded (";
-        private static final String SUFFIX = ").";
+        private static final String METHOD_PREFIX = "Authentication succeeded (";
+        private static final String METHOD_SUFFIX = ").";
+        private static final String ALGORITHM_SUFFIX = " auth success";
 
         private final com.jcraft.jsch.Logger delegate;
-        private volatile String accepted;
+        private volatile String acceptedMethod;
+        private volatile String acceptedAlgorithm;
 
         AcceptedAuthMethodLogger(com.jcraft.jsch.Logger delegate) {
             this.delegate = delegate;
@@ -619,9 +643,9 @@ public class SSHUtil {
 
         @Override
         public boolean isEnabled(int level) {
-            // Info has to read as enabled whatever the delegate thinks, or JSch skips
-            // building the message this class exists to read.
-            return level == INFO || (delegate != null && delegate.isEnabled(level));
+            // Info and debug have to read as enabled whatever the delegate thinks, or JSch
+            // skips building the two messages this class exists to read.
+            return level == INFO || level == DEBUG || (delegate != null && delegate.isEnabled(level));
         }
 
         @Override
@@ -641,32 +665,62 @@ public class SSHUtil {
         }
 
         private void capture(int level, String message) {
-            if (level == INFO && message != null && message.startsWith(PREFIX) && message.endsWith(SUFFIX)) {
-                accepted = message.substring(PREFIX.length(), message.length() - SUFFIX.length());
+            if (message == null) {
+                return;
+            }
+            if (level == INFO && message.startsWith(METHOD_PREFIX) && message.endsWith(METHOD_SUFFIX)) {
+                acceptedMethod = message.substring(METHOD_PREFIX.length(), message.length() - METHOD_SUFFIX.length());
+            } else if (level == DEBUG && message.endsWith(ALGORITHM_SUFFIX)) {
+                acceptedAlgorithm = message.substring(0, message.length() - ALGORITHM_SUFFIX.length()).trim();
             }
         }
 
         /** The method JSch completed, or null if it never logged one. */
-        String accepted() {
-            return accepted;
+        String acceptedMethod() {
+            return acceptedMethod;
+        }
+
+        /** The public key algorithm JSch signed with, or null if it never logged one. */
+        String acceptedAlgorithm() {
+            return acceptedAlgorithm;
         }
     }
 
     /**
-     * Resolves what to record in a system's Auth column from the public key credential
-     * Bastillion attached and the method JSch reports the host accepted.
-     * <p>
-     * The credential only decides the answer once publickey is known to be the method that
-     * succeeded - a host that rejected the certificate and took a password must not be
-     * recorded as having taken the certificate. An unrecognized or missing method is left
-     * null rather than guessed at, which the systems screen renders as unknown.
+     * Marks out the OpenSSH certificate algorithm names, which are the plain key algorithm
+     * with this infix - {@code ssh-ed25519-cert-v01@openssh.com} against
+     * {@code ssh-ed25519}. Matching the infix rather than listing the algorithms keeps this
+     * right for key types Bastillion does not sign certificates for today.
      */
-    static String authMethodFor(String publicKeyCredential, String acceptedMethod) {
+    private static final String CERTIFICATE_ALGORITHM_INFIX = "-cert-v";
+
+    /**
+     * Resolves what to record in a system's Auth column from what JSch reports the host
+     * accepted.
+     * <p>
+     * A publickey success is attributed by the algorithm that signed it, because the
+     * certificate and the key it attests to are both offered as publickey identities and the
+     * method name is "publickey" for either. Only when a single credential was offered, and
+     * the algorithm went unreported, does {@code singleCredential} stand in for it.
+     * <p>
+     * A host that rejected the certificate and took a password must not be recorded as having
+     * taken the certificate, so the fallback methods are their own state. An unrecognized or
+     * missing method is left null rather than guessed at, which the systems screen renders as
+     * unknown.
+     */
+    static String authMethodFor(String singleCredential, String acceptedMethod, String acceptedAlgorithm) {
         if (acceptedMethod == null) {
             return null;
         }
         return switch (acceptedMethod) {
-            case "publickey" -> publicKeyCredential;
+            case "publickey" -> {
+                if (acceptedAlgorithm != null) {
+                    yield acceptedAlgorithm.contains(CERTIFICATE_ALGORITHM_INFIX)
+                            ? HostSystem.AUTH_METHOD_CERTIFICATE
+                            : HostSystem.AUTH_METHOD_KEY;
+                }
+                yield singleCredential;
+            }
             case "password", "keyboard-interactive" -> HostSystem.AUTH_METHOD_PASSWORD;
             default -> null;
         };
@@ -755,7 +809,7 @@ public class SSHUtil {
             if (StringUtils.isBlank(passphrase)) passphrase = appKey.getPassphrase();
             if (passphrase == null) passphrase = "";
 
-            String publicKeyCredential = addApplicationIdentity(jsch, appKey, passphrase, hostSystem, null);
+            String singleCredential = addApplicationIdentity(jsch, appKey, passphrase, hostSystem, null);
 
             session = jsch.getSession(hostSystem.getUser(), hostSystem.getHost(), hostSystem.getPort());
             if (password != null && !password.isEmpty()) session.setPassword(password.getBytes(StandardCharsets.UTF_8));
@@ -765,7 +819,8 @@ public class SSHUtil {
             AcceptedAuthMethodLogger authMethodLogger = new AcceptedAuthMethodLogger(session.getLogger());
             session.setLogger(authMethodLogger);
             session.connect(SESSION_TIMEOUT);
-            recordAuthMethod(hostSystem, authMethodFor(publicKeyCredential, authMethodLogger.accepted()));
+            recordAuthMethod(hostSystem, authMethodFor(singleCredential,
+                    authMethodLogger.acceptedMethod(), authMethodLogger.acceptedAlgorithm()));
 
             addPubKey(hostSystem, session, appKey.getPublicKey());
 

@@ -252,7 +252,14 @@ class SSHUtilTest {
     void acceptedAuthMethodLoggerReadsTheMethodOutOfJschsSuccessLine() {
         SSHUtil.AcceptedAuthMethodLogger logger = new SSHUtil.AcceptedAuthMethodLogger(null);
         logger.log(com.jcraft.jsch.Logger.INFO, "Authentication succeeded (publickey).");
-        assertEquals("publickey", logger.accepted());
+        assertEquals("publickey", logger.acceptedMethod());
+    }
+
+    @Test
+    void acceptedAuthMethodLoggerReadsTheSigningAlgorithmOutOfJschsDebugLine() {
+        SSHUtil.AcceptedAuthMethodLogger logger = new SSHUtil.AcceptedAuthMethodLogger(null);
+        logger.log(com.jcraft.jsch.Logger.DEBUG, "ssh-ed25519-cert-v01@openssh.com auth success");
+        assertEquals("ssh-ed25519-cert-v01@openssh.com", logger.acceptedAlgorithm());
     }
 
     @Test
@@ -260,21 +267,24 @@ class SSHUtilTest {
         SSHUtil.AcceptedAuthMethodLogger logger = new SSHUtil.AcceptedAuthMethodLogger(null);
         logger.log(com.jcraft.jsch.Logger.INFO, "Next authentication method: keyboard-interactive");
         logger.log(com.jcraft.jsch.Logger.INFO, "Authentication succeeded (password).");
-        assertEquals("password", logger.accepted());
+        assertEquals("password", logger.acceptedMethod());
     }
 
     @Test
     void acceptedAuthMethodLoggerReportsNothingWhenNoMethodEverSucceeded() {
         SSHUtil.AcceptedAuthMethodLogger logger = new SSHUtil.AcceptedAuthMethodLogger(null);
         logger.log(com.jcraft.jsch.Logger.INFO, "Disconnecting from localhost port 22");
-        assertNull(logger.accepted());
+        assertNull(logger.acceptedMethod());
+        assertNull(logger.acceptedAlgorithm());
     }
 
     @Test
-    void acceptedAuthMethodLoggerEnablesInfoSoJschBuildsTheMessageAtAll() {
-        // JSch guards the success line with isEnabled(INFO) - reporting info as disabled
-        // would mean the line is never constructed and the method never seen.
-        assertTrue(new SSHUtil.AcceptedAuthMethodLogger(null).isEnabled(com.jcraft.jsch.Logger.INFO));
+    void acceptedAuthMethodLoggerEnablesInfoAndDebugSoJschBuildsTheMessagesAtAll() {
+        // JSch guards both lines with isEnabled() - reporting either level as disabled would
+        // mean the line is never constructed and what the host accepted never seen.
+        SSHUtil.AcceptedAuthMethodLogger logger = new SSHUtil.AcceptedAuthMethodLogger(null);
+        assertTrue(logger.isEnabled(com.jcraft.jsch.Logger.INFO));
+        assertTrue(logger.isEnabled(com.jcraft.jsch.Logger.DEBUG));
     }
 
     @Test
@@ -291,26 +301,43 @@ class SSHUtilTest {
     }
 
     @Test
-    void authMethodForAttributesPublickeyToWhicheverCredentialWasAttached() {
+    void authMethodForTellsCertificateFromKeyByTheAlgorithmThatSignedIt() {
+        // Both are offered as publickey identities, so the method name cannot distinguish
+        // them - which one the host took is the algorithm it accepted a signature from.
         assertEquals(HostSystem.AUTH_METHOD_CERTIFICATE,
-                SSHUtil.authMethodFor(HostSystem.AUTH_METHOD_CERTIFICATE, "publickey"));
+                SSHUtil.authMethodFor(null, "publickey", "ssh-ed25519-cert-v01@openssh.com"));
         assertEquals(HostSystem.AUTH_METHOD_KEY,
-                SSHUtil.authMethodFor(HostSystem.AUTH_METHOD_KEY, "publickey"));
+                SSHUtil.authMethodFor(null, "publickey", "ssh-ed25519"));
+        assertEquals(HostSystem.AUTH_METHOD_CERTIFICATE,
+                SSHUtil.authMethodFor(null, "publickey", "rsa-sha2-512-cert-v01@openssh.com"));
+        assertEquals(HostSystem.AUTH_METHOD_KEY,
+                SSHUtil.authMethodFor(null, "publickey", "rsa-sha2-512"));
+    }
+
+    @Test
+    void authMethodForFallsBackToTheOnlyCredentialOfferedWhenNoAlgorithmWasReported() {
+        assertEquals(HostSystem.AUTH_METHOD_KEY,
+                SSHUtil.authMethodFor(HostSystem.AUTH_METHOD_KEY, "publickey", null));
+    }
+
+    @Test
+    void authMethodForLeavesPublickeyUnknownWhenBothWereOfferedAndNothingSaysWhich() {
+        assertNull(SSHUtil.authMethodFor(null, "publickey", null));
     }
 
     @Test
     void authMethodForDoesNotCreditTheCertificateWhenTheHostTookAPasswordInstead() {
         assertEquals(HostSystem.AUTH_METHOD_PASSWORD,
-                SSHUtil.authMethodFor(HostSystem.AUTH_METHOD_CERTIFICATE, "password"));
+                SSHUtil.authMethodFor(null, "password", null));
         assertEquals(HostSystem.AUTH_METHOD_PASSWORD,
-                SSHUtil.authMethodFor(HostSystem.AUTH_METHOD_CERTIFICATE, "keyboard-interactive"));
+                SSHUtil.authMethodFor(null, "keyboard-interactive", null));
     }
 
     @Test
     void authMethodForLeavesAnUnrecognizedOrMissingMethodUnknown() {
-        assertNull(SSHUtil.authMethodFor(HostSystem.AUTH_METHOD_CERTIFICATE, null));
-        assertNull(SSHUtil.authMethodFor(HostSystem.AUTH_METHOD_CERTIFICATE, "gssapi-with-mic"));
-        assertNull(SSHUtil.authMethodFor(HostSystem.AUTH_METHOD_CERTIFICATE, "none"));
+        assertNull(SSHUtil.authMethodFor(HostSystem.AUTH_METHOD_KEY, null, null));
+        assertNull(SSHUtil.authMethodFor(null, "gssapi-with-mic", null));
+        assertNull(SSHUtil.authMethodFor(null, "none", null));
     }
 
     // --- appendKeyLine: keyManagement=append shares authorized_keys with whatever else
