@@ -135,7 +135,7 @@
         <dependency>
             <groupId>com.github.mwiede</groupId>
             <artifactId>jsch</artifactId>
-            <version>2.28.7</version>
+            <version>2.28.8</version>
         </dependency>
         <!-- jsch needs BouncyCastle at runtime for Ed25519/Ed448 key generation
              (com.jcraft.jsch.bc.KeyPairGenEdDSA); not a transitive dependency of jsch
