@@ -4,6 +4,28 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [6.0.2]
+
+### Fixed
+
+- **LDAP/JAAS login failed for everyone, on every release since 4.0.0.** The directory accepted the password, then `ExternalAuthUtil` threw while reading what it had returned, and the catch-all logged an error and treated it as a failed login. Two causes: it read `LoginContext`'s private fields by reflection, which Java 17+ refuses without `--add-opens`, so every JAAS module failed, including the shipped `ldap-ol` and `ldap-ad` examples; and for Jetty's `LdapLoginModule` it asked for a user `attributes` field on a class that has not had one since Jetty 10. It now uses only public JAAS and Jetty API, and runs the `jaas.conf` examples against an in-memory directory in its tests.
+- **The shipped `jaas.conf` role-mapping example could not load.** `ldap-ol-with-roles` named `org.eclipse.jetty.jaas.spi.LdapLoginModule`, which no longer exists in Jetty 12. It now names `org.eclipse.jetty.security.jaas.spi.LdapLoginModule`, and the old name is mapped in code, so a `jaas.conf` copied from an earlier release keeps working unedited.
+- **LDAP roles could put a user in the wrong profile.** Role names were matched to profiles with `LIKE`, so an `_` in a role acted as a wildcard: a user with the role `web_prod` was added to the `web-prod` profile and could reach its systems. Role names now match profile names exactly (still ignoring case).
+- **Session audit filters showed other users' sessions.** Filtering by user or system used `LIKE`, so filtering on `j_doe` also listed `jxdoe`'s sessions. Filters now match the selected name exactly.
+
+### Added
+
+- **`externalAuthLinkBasicAccounts`**, controlling whether an LDAP or SAML login may sign in to an existing Basic (local-password) account with the same username. `true` (default) keeps the current behavior: the accounts are linked and the local password is cleared. `false` refuses the login and logs it, so a directory or IdP identity named `admin` cannot take over the bootstrap account; switch an account to **External** under **Manage → Users** to let it sign in externally.
+- **Schema versioning.** The database now records its schema version in a `schema_version` table, and changes are applied as numbered migrations on startup, each printed as it runs. An existing database is brought up to date and recorded at version 4 on its first start; nothing about its data changes.
+
+### Changed
+
+- LDAP and SAML now share one implementation for matching a login to an account, creating it if needed, syncing profiles and issuing the session token. New external accounts are created with their external auth type directly, rather than as Basic and switched immediately after.
+- Remaining exact-value lookups (auth tokens, user ids, key fingerprints, status codes) use `=` instead of `LIKE`, and the build now fails on any `LIKE` not marked as an intentional search.
+- Loaded user records no longer carry the password hash and salt, so the user list's page model no longer contains them.
+
+**Upgrade note:** upgrade promptly if you use LDAP — no LDAP user has been able to sign in since 4.0.0, and this release fixes that without any change to `jaas.conf`. If a user's roles map to profiles, check their memberships after their first login: matching is now exact, so a role that only matched a profile through an `_` wildcard no longer does. No other config changes are needed. On first start, the console prints `Applied database migration 1` through `4`; that is the existing schema being recorded, and later restarts print nothing.
+
 ## [6.0.1]
 
 ### Security
