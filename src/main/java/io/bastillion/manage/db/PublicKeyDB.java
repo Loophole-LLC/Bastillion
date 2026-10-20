@@ -92,8 +92,20 @@ public class PublicKeyDB {
      */
     public static void disableKey(Long id) throws SQLException, GeneralSecurityException {
 
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement("update public_keys set enabled=false where id=?")) {
+        try (Connection con = DBUtils.getConn()) {
+            disableKey(con, id);
+        }
+    }
+
+    /**
+     * disables SSH key
+     *
+     * @param con DB connection
+     * @param id key id
+     */
+    public static void disableKey(Connection con, Long id) throws SQLException {
+
+        try (PreparedStatement stmt = con.prepareStatement("update public_keys set enabled=false where id=?")) {
             stmt.setLong(1, id);
             stmt.execute();
         }
@@ -106,8 +118,20 @@ public class PublicKeyDB {
      */
     public static void enableKey(Long id) throws SQLException, GeneralSecurityException {
 
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement("update public_keys set enabled=true where id=?")) {
+        try (Connection con = DBUtils.getConn()) {
+            enableKey(con, id);
+        }
+    }
+
+    /**
+     * re-enables SSH key
+     *
+     * @param con DB connection
+     * @param id key id
+     */
+    public static void enableKey(Connection con, Long id) throws SQLException {
+
+        try (PreparedStatement stmt = con.prepareStatement("update public_keys set enabled=true where id=?")) {
             stmt.setLong(1, id);
             stmt.execute();
         }
@@ -120,10 +144,23 @@ public class PublicKeyDB {
      * @return true if disabled
      */
     public static boolean isKeyDisabled(String fingerprint) throws SQLException, GeneralSecurityException {
+
+        try (Connection con = DBUtils.getConn()) {
+            return isKeyDisabled(con, fingerprint);
+        }
+    }
+
+    /**
+     * checks fingerprint to determine if key is disabled
+     *
+     * @param con         DB connection
+     * @param fingerprint public key fingerprint
+     * @return true if disabled
+     */
+    public static boolean isKeyDisabled(Connection con, String fingerprint) throws SQLException {
         boolean isDisabled = false;
 
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement("select * from  public_keys where fingerprint like ? and enabled=false")) {
+        try (PreparedStatement stmt = con.prepareStatement("select * from  public_keys where fingerprint=? and enabled=false")) {
             stmt.setString(1, fingerprint);
             try (ResultSet rs = stmt.executeQuery()) {
 
@@ -145,6 +182,20 @@ public class PublicKeyDB {
      */
     public static SortedSet getPublicKeySet(SortedSet sortedSet) throws SQLException, GeneralSecurityException {
 
+        try (Connection con = DBUtils.getConn()) {
+            return getPublicKeySet(con, sortedSet);
+        }
+    }
+
+    /**
+     * returns public keys based on sort order defined
+     *
+     * @param con       DB connection
+     * @param sortedSet object that defines sort order
+     * @return sorted script list
+     */
+    public static SortedSet getPublicKeySet(Connection con, SortedSet sortedSet) throws SQLException {
+
         ArrayList<PublicKey> publicKeysList = new ArrayList<>();
 
         String orderBy = sortedSet.toOrderByClause(SORTABLE_FIELDS);
@@ -155,8 +206,7 @@ public class PublicKeyDB {
         sql += StringUtils.isNotEmpty(sortedSet.getFilterMap().get(FILTER_BY_ENABLED)) ? " and p.enabled=? " : " and p.enabled=true";
         sql = sql + orderBy;
 
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement(sql)) {
+        try (PreparedStatement stmt = con.prepareStatement(sql)) {
             int i = 1;
             //set filters in prepared statement
             if (StringUtils.isNotEmpty(sortedSet.getFilterMap().get(FILTER_BY_USER_ID))) {
@@ -201,14 +251,28 @@ public class PublicKeyDB {
      */
     public static SortedSet getPublicKeySet(SortedSet sortedSet, Long userId) throws SQLException, GeneralSecurityException {
 
+        try (Connection con = DBUtils.getConn()) {
+            return getPublicKeySet(con, sortedSet, userId);
+        }
+    }
+
+    /**
+     * returns public keys based on sort order defined
+     *
+     * @param con       DB connection
+     * @param sortedSet object that defines sort order
+     * @param userId    user id
+     * @return sorted script list
+     */
+    public static SortedSet getPublicKeySet(Connection con, SortedSet sortedSet, Long userId) throws SQLException {
+
         ArrayList<PublicKey> publicKeysList = new ArrayList<>();
 
 
         String orderBy = sortedSet.toOrderByClause(SORTABLE_FIELDS);
         String sql = "select * from public_keys where user_id = ? and enabled=true" + orderBy;
 
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement(sql)) {
+        try (PreparedStatement stmt = con.prepareStatement(sql)) {
             stmt.setLong(1, userId);
             try (ResultSet rs = stmt.executeQuery()) {
 
@@ -263,8 +327,26 @@ public class PublicKeyDB {
      */
     public static PublicKey getPublicKeyForUser(Long publicKeyId, Long userId)
             throws SQLException, GeneralSecurityException {
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement(
+
+        try (Connection con = DBUtils.getConn()) {
+            return getPublicKeyForUser(con, publicKeyId, userId);
+        }
+    }
+
+    /**
+     * The given user's own public key, or null if that key is not theirs.
+     * <p>
+     * Ownership is a condition of the query rather than a field compared afterwards, because
+     * {@link #getPublicKey(Connection, Long)} does not populate userId at all - so a caller
+     * that fetched a key and compared getUserId() would be comparing against null every time,
+     * and would have to get the direction of that test exactly right to fail safe. Scoping it
+     * here means a key that is not the user's simply is not returned.
+     *
+     * @param con DB connection
+     */
+    public static PublicKey getPublicKeyForUser(Connection con, Long publicKeyId, Long userId)
+            throws SQLException {
+        try (PreparedStatement stmt = con.prepareStatement(
                      "select * from public_keys where id=? and user_id=?")) {
             stmt.setLong(1, publicKeyId);
             stmt.setLong(2, userId);
@@ -315,8 +397,20 @@ public class PublicKeyDB {
      */
     public static void insertPublicKey(PublicKey publicKey) throws SQLException, GeneralSecurityException {
 
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement("insert into public_keys(key_nm, type, fingerprint, public_key, profile_id, user_id) values (?,?,?,?,?,?)")) {
+        try (Connection con = DBUtils.getConn()) {
+            insertPublicKey(con, publicKey);
+        }
+    }
+
+    /**
+     * inserts new public key
+     *
+     * @param con       DB connection
+     * @param publicKey key object
+     */
+    public static void insertPublicKey(Connection con, PublicKey publicKey) throws SQLException {
+
+        try (PreparedStatement stmt = con.prepareStatement("insert into public_keys(key_nm, type, fingerprint, public_key, profile_id, user_id) values (?,?,?,?,?,?)")) {
             stmt.setString(1, publicKey.getKeyNm());
             stmt.setString(2, SSHUtil.getKeyType(publicKey.getPublicKey()));
             stmt.setString(3, SSHUtil.getFingerprint(publicKey.getPublicKey()));
@@ -339,8 +433,20 @@ public class PublicKeyDB {
      */
     public static void updatePublicKey(PublicKey publicKey) throws SQLException, GeneralSecurityException {
 
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement("update public_keys set key_nm=?, type=?, fingerprint=?, public_key=?, profile_id=? where id=? and user_id=? and enabled=true")) {
+        try (Connection con = DBUtils.getConn()) {
+            updatePublicKey(con, publicKey);
+        }
+    }
+
+    /**
+     * updates existing public key
+     *
+     * @param con       DB connection
+     * @param publicKey key object
+     */
+    public static void updatePublicKey(Connection con, PublicKey publicKey) throws SQLException {
+
+        try (PreparedStatement stmt = con.prepareStatement("update public_keys set key_nm=?, type=?, fingerprint=?, public_key=?, profile_id=? where id=? and user_id=? and enabled=true")) {
             stmt.setString(1, publicKey.getKeyNm());
             stmt.setString(2, SSHUtil.getKeyType(publicKey.getPublicKey()));
             stmt.setString(3, SSHUtil.getFingerprint(publicKey.getPublicKey()));
@@ -365,9 +471,21 @@ public class PublicKeyDB {
      */
     public static void deletePublicKey(Long publicKeyId, Long userId) throws SQLException, GeneralSecurityException {
 
+        try (Connection con = DBUtils.getConn()) {
+            deletePublicKey(con, publicKeyId, userId);
+        }
+    }
 
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement("delete from public_keys where id=? and user_id=? and enabled=true")) {
+    /**
+     * deletes public key
+     *
+     * @param con         DB connection
+     * @param publicKeyId key id
+     * @param userId      user id
+     */
+    public static void deletePublicKey(Connection con, Long publicKeyId, Long userId) throws SQLException {
+
+        try (PreparedStatement stmt = con.prepareStatement("delete from public_keys where id=? and user_id=? and enabled=true")) {
             stmt.setLong(1, publicKeyId);
             stmt.setLong(2, userId);
             stmt.execute();
@@ -381,9 +499,20 @@ public class PublicKeyDB {
      */
     public static void deleteUserPublicKeys(Long userId) throws SQLException, GeneralSecurityException {
 
+        try (Connection con = DBUtils.getConn()) {
+            deleteUserPublicKeys(con, userId);
+        }
+    }
 
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement("delete from public_keys where user_id=? and enabled=true")) {
+    /**
+     * deletes all public keys for user
+     *
+     * @param con    DB connection
+     * @param userId user id
+     */
+    public static void deleteUserPublicKeys(Connection con, Long userId) throws SQLException {
+
+        try (PreparedStatement stmt = con.prepareStatement("delete from public_keys where user_id=? and enabled=true")) {
             stmt.setLong(1, userId);
             stmt.execute();
         }
@@ -422,10 +551,24 @@ public class PublicKeyDB {
      * @return true if duplicate
      */
     public static boolean isKeyRegistered(Long userId, PublicKey publicKey) throws SQLException, GeneralSecurityException {
+
+        try (Connection con = DBUtils.getConn()) {
+            return isKeyRegistered(con, userId, publicKey);
+        }
+    }
+
+    /**
+     * checks if key has already been registered under user's profile
+     *
+     * @param con       DB connection
+     * @param userId    user id
+     * @param publicKey public key
+     * @return true if duplicate
+     */
+    public static boolean isKeyRegistered(Connection con, Long userId, PublicKey publicKey) throws SQLException {
         boolean isDuplicate = false;
 
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement("select * from public_keys where user_id=? and fingerprint like ? and profile_id = ? and id <> ?")) {
+        try (PreparedStatement stmt = con.prepareStatement("select * from public_keys where user_id=? and fingerprint=? and profile_id = ? and id <> ?")) {
             stmt.setLong(1, userId);
             stmt.setString(2, SSHUtil.getFingerprint(publicKey.getPublicKey()));
             if (publicKey.getProfile() != null && publicKey.getProfile().getId() != null) {
@@ -457,9 +600,22 @@ public class PublicKeyDB {
      */
     public static List getUniquePublicKeysForUser(Long userId) throws SQLException, GeneralSecurityException {
 
+        try (Connection con = DBUtils.getConn()) {
+            return getUniquePublicKeysForUser(con, userId);
+        }
+    }
+
+    /**
+     * select all unique public keys for user
+     *
+     * @param con    DB connection
+     * @param userId user id
+     * @return public  key list for user
+     */
+    public static List getUniquePublicKeysForUser(Connection con, Long userId) throws SQLException {
+
         Map<String, PublicKey> keyMap = new LinkedHashMap<>();
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement("select * from public_keys where user_id=? and enabled=true order by key_nm asc")) {
+        try (PreparedStatement stmt = con.prepareStatement("select * from public_keys where user_id=? and enabled=true order by key_nm asc")) {
             stmt.setLong(1, userId);
             try (ResultSet rs = stmt.executeQuery()) {
                 while (rs.next()) {

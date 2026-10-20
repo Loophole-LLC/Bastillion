@@ -33,17 +33,29 @@ public class ProfileSystemsDB {
     public static void setSystemsForProfile(Long profileId, List<Long> systemIdList) throws SQLException, GeneralSecurityException {
 
         try (Connection con = DBUtils.getConn()) {
-            try (PreparedStatement stmt = con.prepareStatement("delete from system_map where profile_id=?")) {
-                stmt.setLong(1, profileId);
-                stmt.execute();
-            }
+            setSystemsForProfile(con, profileId, systemIdList);
+        }
+    }
 
-            for (Long systemId : systemIdList) {
-                try (PreparedStatement stmt = con.prepareStatement("insert into system_map (profile_id, system_id) values (?,?)")) {
-                    stmt.setLong(1, profileId);
-                    stmt.setLong(2, systemId);
-                    stmt.execute();
-                }
+    /**
+     * sets host systems for profile
+     *
+     * @param con          DB connection
+     * @param profileId    profile id
+     * @param systemIdList list of host system ids
+     */
+    public static void setSystemsForProfile(Connection con, Long profileId, List<Long> systemIdList) throws SQLException {
+
+        try (PreparedStatement stmt = con.prepareStatement("delete from system_map where profile_id=?")) {
+            stmt.setLong(1, profileId);
+            stmt.execute();
+        }
+
+        for (Long systemId : systemIdList) {
+            try (PreparedStatement stmt = con.prepareStatement("insert into system_map (profile_id, system_id) values (?,?)")) {
+                stmt.setLong(1, profileId);
+                stmt.setLong(2, systemId);
+                stmt.execute();
             }
         }
     }

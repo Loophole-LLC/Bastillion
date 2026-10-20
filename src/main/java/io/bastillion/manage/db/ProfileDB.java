@@ -44,6 +44,19 @@ public class ProfileDB {
      */
     public static SortedSet getProfileSet(SortedSet sortedSet) throws SQLException, GeneralSecurityException {
 
+        try (Connection con = DBUtils.getConn()) {
+            return getProfileSet(con, sortedSet);
+        }
+    }
+
+    /**
+     * method to do order by based on the sorted set object for profiles
+     *
+     * @param con DB connection
+     * @return list of profiles
+     */
+    public static SortedSet getProfileSet(Connection con, SortedSet sortedSet) throws SQLException {
+
         ArrayList<Profile> profileList = new ArrayList<>();
 
         String orderBy = sortedSet.toOrderByClause(SORTABLE_FIELDS);
@@ -58,8 +71,7 @@ public class ProfileDB {
         }
         sql = sql + orderBy;
 
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement(sql)) {
+        try (PreparedStatement stmt = con.prepareStatement(sql)) {
             if (StringUtils.isNotEmpty(sortedSet.getFilterMap().get(FILTER_BY_SYSTEM))) {
                 stmt.setString(1, "%" + sortedSet.getFilterMap().get(FILTER_BY_SYSTEM).toLowerCase() + "%");
                 stmt.setString(2, "%" + sortedSet.getFilterMap().get(FILTER_BY_SYSTEM).toLowerCase() + "%");
@@ -88,9 +100,21 @@ public class ProfileDB {
      */
     public static List<Profile> getAllProfiles() throws SQLException, GeneralSecurityException {
 
+        try (Connection con = DBUtils.getConn()) {
+            return getAllProfiles(con);
+        }
+    }
+
+    /**
+     * returns all profile information
+     *
+     * @param con DB connection
+     * @return list of profiles
+     */
+    public static List<Profile> getAllProfiles(Connection con) throws SQLException {
+
         ArrayList<Profile> profileList = new ArrayList<>();
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement("select * from  profiles order by nm asc");
+        try (PreparedStatement stmt = con.prepareStatement("select * from  profiles order by nm asc");
              ResultSet rs = stmt.executeQuery()) {
 
             while (rs.next()) {
@@ -155,8 +179,20 @@ public class ProfileDB {
      */
     public static void insertProfile(Profile profile) throws SQLException, GeneralSecurityException {
 
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement("insert into profiles (nm, desc) values (?,?)")) {
+        try (Connection con = DBUtils.getConn()) {
+            insertProfile(con, profile);
+        }
+    }
+
+    /**
+     * inserts new profile
+     *
+     * @param con     DB connection
+     * @param profile profile object
+     */
+    public static void insertProfile(Connection con, Profile profile) throws SQLException {
+
+        try (PreparedStatement stmt = con.prepareStatement("insert into profiles (nm, desc) values (?,?)")) {
             stmt.setString(1, profile.getNm());
             stmt.setString(2, profile.getDesc());
             stmt.execute();
@@ -170,8 +206,20 @@ public class ProfileDB {
      */
     public static void updateProfile(Profile profile) throws SQLException, GeneralSecurityException {
 
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement("update profiles set nm=?, desc=? where id=?")) {
+        try (Connection con = DBUtils.getConn()) {
+            updateProfile(con, profile);
+        }
+    }
+
+    /**
+     * updates profile
+     *
+     * @param con     DB connection
+     * @param profile profile object
+     */
+    public static void updateProfile(Connection con, Profile profile) throws SQLException {
+
+        try (PreparedStatement stmt = con.prepareStatement("update profiles set nm=?, desc=? where id=?")) {
             stmt.setString(1, profile.getNm());
             stmt.setString(2, profile.getDesc());
             stmt.setLong(3, profile.getId());
@@ -186,8 +234,20 @@ public class ProfileDB {
      */
     public static void deleteProfile(Long profileId) throws SQLException, GeneralSecurityException {
 
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement("delete from profiles where id=?")) {
+        try (Connection con = DBUtils.getConn()) {
+            deleteProfile(con, profileId);
+        }
+    }
+
+    /**
+     * deletes profile
+     *
+     * @param con       DB connection
+     * @param profileId profile id
+     */
+    public static void deleteProfile(Connection con, Long profileId) throws SQLException {
+
+        try (PreparedStatement stmt = con.prepareStatement("delete from profiles where id=?")) {
             stmt.setLong(1, profileId);
             stmt.execute();
         }

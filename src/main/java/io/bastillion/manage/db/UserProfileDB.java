@@ -34,21 +34,33 @@ public class UserProfileDB {
     public static void setUsersForProfile(Long profileId, List<Long> userIdList) throws SQLException, GeneralSecurityException {
 
         try (Connection con = DBUtils.getConn()) {
-            try (PreparedStatement stmt = con.prepareStatement("delete from user_map where profile_id=?")) {
+            setUsersForProfile(con, profileId, userIdList);
+        }
+    }
+
+    /**
+     * sets users for profile
+     *
+     * @param con        DB connection
+     * @param profileId  profile id
+     * @param userIdList list of user ids
+     */
+    public static void setUsersForProfile(Connection con, Long profileId, List<Long> userIdList) throws SQLException {
+
+        try (PreparedStatement stmt = con.prepareStatement("delete from user_map where profile_id=?")) {
+            stmt.setLong(1, profileId);
+            stmt.execute();
+        }
+
+        for (Long userId : userIdList) {
+            try (PreparedStatement stmt = con.prepareStatement("insert into user_map (profile_id, user_id) values (?,?)")) {
                 stmt.setLong(1, profileId);
+                stmt.setLong(2, userId);
                 stmt.execute();
             }
-
-            for (Long userId : userIdList) {
-                try (PreparedStatement stmt = con.prepareStatement("insert into user_map (profile_id, user_id) values (?,?)")) {
-                    stmt.setLong(1, profileId);
-                    stmt.setLong(2, userId);
-                    stmt.execute();
-                }
-            }
-            //delete all unassigned keys by profile
-            PublicKeyDB.deleteUnassignedKeysByProfile(con, profileId);
         }
+        //delete all unassigned keys by profile
+        PublicKeyDB.deleteUnassignedKeysByProfile(con, profileId);
     }
 
     /**
@@ -94,10 +106,24 @@ public class UserProfileDB {
      * @return true if user belongs to profile
      */
     public static boolean checkIsUsersProfile(Long userId, Long profileId) throws SQLException, GeneralSecurityException {
+
+        try (Connection con = DBUtils.getConn()) {
+            return checkIsUsersProfile(con, userId, profileId);
+        }
+    }
+
+    /**
+     * checks to determine if user belongs to profile
+     *
+     * @param con       DB connection
+     * @param userId    user id
+     * @param profileId profile id
+     * @return true if user belongs to profile
+     */
+    public static boolean checkIsUsersProfile(Connection con, Long userId, Long profileId) throws SQLException {
         boolean isUsersProfile = false;
 
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement("select * from user_map where profile_id=? and user_id=?")) {
+        try (PreparedStatement stmt = con.prepareStatement("select * from user_map where profile_id=? and user_id=?")) {
             stmt.setLong(1, profileId);
             stmt.setLong(2, userId);
 
@@ -124,7 +150,7 @@ public class UserProfileDB {
             if (StringUtils.isNotEmpty(profileNm)) {
 
                 Long profileId = null;
-                try (PreparedStatement stmt = con.prepareStatement("select id from  profiles p where lower(p.nm) like ?")) {
+                try (PreparedStatement stmt = con.prepareStatement("select id from  profiles p where lower(p.nm) = ?")) {
                     stmt.setString(1, profileNm.toLowerCase());
                     try (ResultSet rs = stmt.executeQuery()) {
                         while (rs.next()) {
@@ -168,7 +194,7 @@ public class UserProfileDB {
         if (StringUtils.isNotEmpty(profileNm)) {
 
             Long profileId = null;
-            try (PreparedStatement stmt = con.prepareStatement("select id from  profiles p where lower(p.nm) like ?")) {
+            try (PreparedStatement stmt = con.prepareStatement("select id from  profiles p where lower(p.nm) = ?")) {
                 stmt.setString(1, profileNm.toLowerCase());
                 try (ResultSet rs = stmt.executeQuery()) {
                     while (rs.next()) {

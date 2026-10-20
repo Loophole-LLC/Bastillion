@@ -55,6 +55,21 @@ public class SystemDB {
      * @return sortedSet with list of host systems
      */
     public static SortedSet getUserSystemSet(SortedSet sortedSet, Long userId) throws SQLException, GeneralSecurityException {
+
+        try (Connection con = DBUtils.getConn()) {
+            return getUserSystemSet(con, sortedSet, userId);
+        }
+    }
+
+    /**
+     * method to do order by based on the sorted set object for systems for user
+     *
+     * @param con       DB connection
+     * @param sortedSet sorted set object
+     * @param userId    user id
+     * @return sortedSet with list of host systems
+     */
+    public static SortedSet getUserSystemSet(Connection con, SortedSet sortedSet, Long userId) throws SQLException {
         List<HostSystem> hostSystemList = new ArrayList<>();
 
         String orderBy = sortedSet.toOrderByClause(SORTABLE_FIELDS);
@@ -64,8 +79,7 @@ public class SystemDB {
         sql += ")" + orderBy;
 
         //get user for auth token
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement(sql)) {
+        try (PreparedStatement stmt = con.prepareStatement(sql)) {
             stmt.setLong(1, userId);
             //filter by profile id if exists
             if (StringUtils.isNotEmpty(sortedSet.getFilterMap().get(FILTER_BY_PROFILE_ID))) {
@@ -93,13 +107,27 @@ public class SystemDB {
      * @profileId check if system is apart of given profile
      */
     public static SortedSet getSystemSet(SortedSet sortedSet, Long profileId) throws SQLException, GeneralSecurityException {
+
+        try (Connection con = DBUtils.getConn()) {
+            return getSystemSet(con, sortedSet, profileId);
+        }
+    }
+
+    /**
+     * method to do order by based on the sorted set object for systems
+     *
+     * @param con       DB connection
+     * @param sortedSet sorted set object
+     * @return sortedSet with list of host systems
+     * @profileId check if system is apart of given profile
+     */
+    public static SortedSet getSystemSet(Connection con, SortedSet sortedSet, Long profileId) throws SQLException {
         List<HostSystem> hostSystemList = new ArrayList<>();
 
         String orderBy = sortedSet.toOrderByClause(SORTABLE_FIELDS);
         String sql = "select s.*, m.profile_id from  system s left join system_map  m on m.system_id = s.id and m.profile_id = ?" + orderBy;
 
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement(sql)) {
+        try (PreparedStatement stmt = con.prepareStatement(sql)) {
             stmt.setLong(1, profileId);
             try (ResultSet rs = stmt.executeQuery()) {
 
@@ -122,6 +150,20 @@ public class SystemDB {
      * @return sortedSet with list of host systems
      */
     public static SortedSet getSystemSet(SortedSet sortedSet) throws SQLException, GeneralSecurityException {
+
+        try (Connection con = DBUtils.getConn()) {
+            return getSystemSet(con, sortedSet);
+        }
+    }
+
+    /**
+     * method to do order by based on the sorted set object for systems
+     *
+     * @param con       DB connection
+     * @param sortedSet sorted set object
+     * @return sortedSet with list of host systems
+     */
+    public static SortedSet getSystemSet(Connection con, SortedSet sortedSet) throws SQLException {
         List<HostSystem> hostSystemList = new ArrayList<>();
 
         String orderBy = sortedSet.toOrderByClause(SORTABLE_FIELDS);
@@ -130,8 +172,7 @@ public class SystemDB {
         sql += StringUtils.isNotEmpty(sortedSet.getFilterMap().get(FILTER_BY_PROFILE_ID)) ? ",system_map m where s.id=m.system_id and m.profile_id=?" : "";
         sql += orderBy;
 
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement(sql)) {
+        try (PreparedStatement stmt = con.prepareStatement(sql)) {
             if (StringUtils.isNotEmpty(sortedSet.getFilterMap().get(FILTER_BY_PROFILE_ID))) {
                 stmt.setLong(1, Long.parseLong(sortedSet.getFilterMap().get(FILTER_BY_PROFILE_ID)));
             }
@@ -193,9 +234,20 @@ public class SystemDB {
      */
     public static int getSystemCount() throws SQLException, GeneralSecurityException {
 
+        try (Connection con = DBUtils.getConn()) {
+            return getSystemCount(con);
+        }
+    }
+
+    /**
+     * returns the total number of registered systems, for license enforcement
+     *
+     * @param con DB connection
+     */
+    public static int getSystemCount(Connection con) throws SQLException {
+
         int count = 0;
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement("select count(*) from system");
+        try (PreparedStatement stmt = con.prepareStatement("select count(*) from system");
              ResultSet rs = stmt.executeQuery()) {
             if (rs.next()) {
                 count = rs.getInt(1);
@@ -239,11 +291,28 @@ public class SystemDB {
      */
     public static void updateAuthMethod(Long systemId, String authMethod)
             throws SQLException, GeneralSecurityException {
+
+        try (Connection con = DBUtils.getConn()) {
+            updateAuthMethod(con, systemId, authMethod);
+        }
+    }
+
+    /**
+     * Records how the last connection to this system authenticated.
+     * <p>
+     * Deliberately its own statement rather than a column on {@link #updateSystem}, which
+     * writes a fixed list straight from the form-bound HostSystem - editing a system in the
+     * UI carries no auth-method field, so folding it in there would wipe the value every time
+     * somebody renamed a host.
+     *
+     * @param con DB connection
+     */
+    public static void updateAuthMethod(Connection con, Long systemId, String authMethod)
+            throws SQLException {
         if (systemId == null) {
             return;
         }
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement(
+        try (PreparedStatement stmt = con.prepareStatement(
                      "update system set last_auth_method=? where id=?")) {
             stmt.setString(1, authMethod);
             stmt.setLong(2, systemId);
@@ -253,9 +322,15 @@ public class SystemDB {
 
     public static Long insertSystem(HostSystem hostSystem) throws SQLException, GeneralSecurityException {
 
+        try (Connection con = DBUtils.getConn()) {
+            return insertSystem(con, hostSystem);
+        }
+    }
+
+    public static Long insertSystem(Connection con, HostSystem hostSystem) throws SQLException {
+
         Long userId = null;
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement("insert into system (display_nm, username, host, port, authorized_keys, status_cd) values (?,?,?,?,?,?)", PreparedStatement.RETURN_GENERATED_KEYS)) {
+        try (PreparedStatement stmt = con.prepareStatement("insert into system (display_nm, username, host, port, authorized_keys, status_cd) values (?,?,?,?,?,?)", PreparedStatement.RETURN_GENERATED_KEYS)) {
             stmt.setString(1, hostSystem.getDisplayNm());
             stmt.setString(2, hostSystem.getUser());
             stmt.setString(3, hostSystem.getHost());
@@ -281,8 +356,20 @@ public class SystemDB {
      */
     public static void updateSystem(HostSystem hostSystem) throws SQLException, GeneralSecurityException {
 
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement("update system set display_nm=?, username=?, host=?, port=?, authorized_keys=?, status_cd=?  where id=?")) {
+        try (Connection con = DBUtils.getConn()) {
+            updateSystem(con, hostSystem);
+        }
+    }
+
+    /**
+     * updates host system record
+     *
+     * @param con        DB connection
+     * @param hostSystem host system object
+     */
+    public static void updateSystem(Connection con, HostSystem hostSystem) throws SQLException {
+
+        try (PreparedStatement stmt = con.prepareStatement("update system set display_nm=?, username=?, host=?, port=?, authorized_keys=?, status_cd=?  where id=?")) {
             stmt.setString(1, hostSystem.getDisplayNm());
             stmt.setString(2, hostSystem.getUser());
             stmt.setString(3, hostSystem.getHost());
@@ -301,9 +388,20 @@ public class SystemDB {
      */
     public static void deleteSystem(Long hostSystemId) throws SQLException, GeneralSecurityException {
 
+        try (Connection con = DBUtils.getConn()) {
+            deleteSystem(con, hostSystemId);
+        }
+    }
 
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement("delete from system where id=?")) {
+    /**
+     * deletes host system
+     *
+     * @param con          DB connection
+     * @param hostSystemId host system id
+     */
+    public static void deleteSystem(Connection con, Long hostSystemId) throws SQLException {
+
+        try (PreparedStatement stmt = con.prepareStatement("delete from system where id=?")) {
             stmt.setLong(1, hostSystemId);
             stmt.execute();
         }
@@ -316,11 +414,23 @@ public class SystemDB {
      */
     public static List<HostSystem> getAllSystems() throws SQLException, GeneralSecurityException {
 
+        try (Connection con = DBUtils.getConn()) {
+            return getAllSystems(con);
+        }
+    }
+
+    /**
+     * returns all systems
+     *
+     * @param con DB connection
+     * @return system list
+     */
+    public static List<HostSystem> getAllSystems(Connection con) throws SQLException {
+
         List<HostSystem> hostSystemList = new ArrayList<>();
 
 
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement("select * from system");
+        try (PreparedStatement stmt = con.prepareStatement("select * from system");
              ResultSet rs = stmt.executeQuery()) {
 
             while (rs.next()) {

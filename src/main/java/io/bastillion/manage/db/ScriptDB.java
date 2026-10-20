@@ -44,13 +44,27 @@ public class ScriptDB {
      */
     public static SortedSet getScriptSet(SortedSet sortedSet, Long userId) throws SQLException, GeneralSecurityException {
 
+        try (Connection con = DBUtils.getConn()) {
+            return getScriptSet(con, sortedSet, userId);
+        }
+    }
+
+    /**
+     * returns scripts based on sort order defined
+     *
+     * @param con       DB connection
+     * @param sortedSet object that defines sort order
+     * @param userId    user id
+     * @return sorted script list
+     */
+    public static SortedSet getScriptSet(Connection con, SortedSet sortedSet, Long userId) throws SQLException {
+
         ArrayList<Script> scriptList = new ArrayList<>();
 
         String orderBy = sortedSet.toOrderByClause(SORTABLE_FIELDS);
         String sql = "select * from scripts where user_id=?" + orderBy;
 
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement(sql)) {
+        try (PreparedStatement stmt = con.prepareStatement(sql)) {
             stmt.setLong(1, userId);
             try (ResultSet rs = stmt.executeQuery()) {
                 while (rs.next()) {
@@ -119,8 +133,21 @@ public class ScriptDB {
      */
     public static void insertScript(Script script, Long userId) throws SQLException, GeneralSecurityException {
 
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement("insert into scripts (display_nm, script, user_id) values (?,?,?)")) {
+        try (Connection con = DBUtils.getConn()) {
+            insertScript(con, script, userId);
+        }
+    }
+
+    /**
+     * inserts new script
+     *
+     * @param con    DB connection
+     * @param script script object
+     * @param userId user id
+     */
+    public static void insertScript(Connection con, Script script, Long userId) throws SQLException {
+
+        try (PreparedStatement stmt = con.prepareStatement("insert into scripts (display_nm, script, user_id) values (?,?,?)")) {
             stmt.setString(1, script.getDisplayNm());
             stmt.setString(2, script.getScript());
             stmt.setLong(3, userId);
@@ -136,8 +163,21 @@ public class ScriptDB {
      */
     public static void updateScript(Script script, Long userId) throws SQLException, GeneralSecurityException {
 
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement("update scripts set display_nm=?, script=? where id=? and user_id=?")) {
+        try (Connection con = DBUtils.getConn()) {
+            updateScript(con, script, userId);
+        }
+    }
+
+    /**
+     * updates existing script
+     *
+     * @param con    DB connection
+     * @param script script object
+     * @param userId user id
+     */
+    public static void updateScript(Connection con, Script script, Long userId) throws SQLException {
+
+        try (PreparedStatement stmt = con.prepareStatement("update scripts set display_nm=?, script=? where id=? and user_id=?")) {
             stmt.setString(1, script.getDisplayNm());
             stmt.setString(2, script.getScript());
             stmt.setLong(3, script.getId());
@@ -154,8 +194,21 @@ public class ScriptDB {
      */
     public static void deleteScript(Long scriptId, Long userId) throws SQLException, GeneralSecurityException {
 
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement("delete from scripts where id=? and user_id=?")) {
+        try (Connection con = DBUtils.getConn()) {
+            deleteScript(con, scriptId, userId);
+        }
+    }
+
+    /**
+     * deletes script
+     *
+     * @param con      DB connection
+     * @param scriptId script id
+     * @param userId   user id
+     */
+    public static void deleteScript(Connection con, Long scriptId, Long userId) throws SQLException {
+
+        try (PreparedStatement stmt = con.prepareStatement("delete from scripts where id=? and user_id=?")) {
             stmt.setLong(1, scriptId);
             stmt.setLong(2, userId);
             stmt.execute();

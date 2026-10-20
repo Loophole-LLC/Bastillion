@@ -161,16 +161,27 @@ public class AuthDB {
      * updates password for admin using auth token
      */
     public static boolean updatePassword(Auth auth) throws SQLException, GeneralSecurityException {
+
+        try (Connection con = DBUtils.getConn()) {
+            return updatePassword(con, auth);
+        }
+    }
+
+    /**
+     * updates password for admin using auth token
+     *
+     * @param con DB connection
+     */
+    public static boolean updatePassword(Connection con, Auth auth) throws SQLException, GeneralSecurityException {
         boolean success = false;
 
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement("select * from users where auth_token like ?")) {
+        try (PreparedStatement stmt = con.prepareStatement("select * from users where auth_token=?")) {
             stmt.setString(1, auth.getAuthToken());
             try (ResultSet rs = stmt.executeQuery()) {
                 if (rs.next() && EncryptionUtil.verifyHash(auth.getPrevPassword(), rs.getString("salt"), rs.getString("password"))) {
 
                     String salt = EncryptionUtil.generateSalt();
-                    try (PreparedStatement updateStmt = con.prepareStatement("update users set password=?, salt=? where auth_token like ?")) {
+                    try (PreparedStatement updateStmt = con.prepareStatement("update users set password=?, salt=? where auth_token=?")) {
                         updateStmt.setString(1, EncryptionUtil.hashV2(auth.getPassword(), salt));
                         updateStmt.setString(2, salt);
                         updateStmt.setString(3, auth.getAuthToken());
@@ -194,7 +205,7 @@ public class AuthDB {
     public static User getUserByAuthToken(Connection con, String authToken) throws SQLException {
 
         User user = null;
-        try (PreparedStatement stmt = con.prepareStatement("select * from users where auth_token like ?")) {
+        try (PreparedStatement stmt = con.prepareStatement("select * from users where auth_token=?")) {
             stmt.setString(1, authToken);
             try (ResultSet rs = stmt.executeQuery()) {
                 if (rs.next()) {
@@ -229,9 +240,22 @@ public class AuthDB {
      */
     public static String getSharedSecret(Long userId) throws SQLException, GeneralSecurityException {
 
+        try (Connection con = DBUtils.getConn()) {
+            return getSharedSecret(con, userId);
+        }
+    }
+
+    /**
+     * returns the shared secret based on user id
+     *
+     * @param con    DB connection
+     * @param userId user id
+     * @return auth object
+     */
+    public static String getSharedSecret(Connection con, Long userId) throws SQLException, GeneralSecurityException {
+
         String sharedSecret = null;
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement("select * from users where id like ?")) {
+        try (PreparedStatement stmt = con.prepareStatement("select * from users where id=?")) {
             stmt.setLong(1, userId);
             try (ResultSet rs = stmt.executeQuery()) {
                 if (rs.next()) {
@@ -251,8 +275,21 @@ public class AuthDB {
      */
     public static void updateSharedSecret(String secret, String authToken) throws SQLException, GeneralSecurityException {
 
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement("update users set otp_secret=? where auth_token=?")) {
+        try (Connection con = DBUtils.getConn()) {
+            updateSharedSecret(con, secret, authToken);
+        }
+    }
+
+    /**
+     * updates shared secret based on auth token
+     *
+     * @param con       DB connection
+     * @param secret    OTP shared secret
+     * @param authToken auth token
+     */
+    public static void updateSharedSecret(Connection con, String secret, String authToken) throws SQLException, GeneralSecurityException {
+
+        try (PreparedStatement stmt = con.prepareStatement("update users set otp_secret=? where auth_token=?")) {
             stmt.setString(1, EncryptionUtil.encrypt(secret));
             stmt.setString(2, authToken);
             stmt.execute();
@@ -284,16 +321,7 @@ public class AuthDB {
                     if (user != null) {
                         throw new SQLException("Multiple users match username " + uid);
                     }
-                    user = new User();
-                    user.setId(rs.getLong("id"));
-                    user.setFirstNm(rs.getString("first_nm"));
-                    user.setLastNm(rs.getString("last_nm"));
-                    user.setEmail(rs.getString("email"));
-                    user.setUsername(rs.getString("username"));
-                    user.setUserType(rs.getString("user_type"));
-                    user.setLastLoginTm(rs.getTimestamp("last_login_tm"));
-                    user.setExpirationTm(rs.getTimestamp("expiration_tm"));
-                    user.setExpired(EXPIRATION_DAYS > 0 && user.getExpirationTm() != null && user.getExpirationTm().before(new Date()));
+                    user = UserDB.mapUser(rs);
                     user.setProfileList(UserProfileDB.getProfilesByUser(con, user.getId()));
                 }
             }

@@ -54,14 +54,24 @@ public class HostKeyDB {
      * @return every recorded host key, ordered for the manage screen
      */
     public static SortedSet getHostKeySet(SortedSet sortedSet) throws SQLException, GeneralSecurityException {
+
+        try (Connection con = DBUtils.getConn()) {
+            return getHostKeySet(con, sortedSet);
+        }
+    }
+
+    /**
+     * @param con DB connection
+     * @return every recorded host key, ordered for the manage screen
+     */
+    public static SortedSet getHostKeySet(Connection con, SortedSet sortedSet) throws SQLException {
         List<KnownHostKey> hostKeyList = new ArrayList<>();
 
         String sql = "select k.*, u.username as approved_by_username from host_key k"
                 + " left join users u on u.id = k.approved_by"
                 + sortedSet.toOrderByClause(SORTABLE_FIELDS);
 
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement(sql);
+        try (PreparedStatement stmt = con.prepareStatement(sql);
              ResultSet rs = stmt.executeQuery()) {
             while (rs.next()) {
                 hostKeyList.add(mapHostKey(rs));
@@ -76,8 +86,18 @@ public class HostKeyDB {
      * @return the recorded key with this row id, or null if none
      */
     public static KnownHostKey getHostKey(Long id) throws SQLException, GeneralSecurityException {
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement(
+
+        try (Connection con = DBUtils.getConn()) {
+            return getHostKey(con, id);
+        }
+    }
+
+    /**
+     * @param con DB connection
+     * @return the recorded key with this row id, or null if none
+     */
+    public static KnownHostKey getHostKey(Connection con, Long id) throws SQLException {
+        try (PreparedStatement stmt = con.prepareStatement(
                      "select k.*, u.username as approved_by_username from host_key k"
                              + " left join users u on u.id = k.approved_by where k.id=?")) {
             stmt.setLong(1, id);
@@ -118,8 +138,22 @@ public class HostKeyDB {
      */
     public static void insertHostKey(String host, int port, String type, String publicKey,
                                      String fingerprint, String status) throws SQLException, GeneralSecurityException {
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement(
+
+        try (Connection con = DBUtils.getConn()) {
+            insertHostKey(con, host, port, type, publicKey, fingerprint, status);
+        }
+    }
+
+    /**
+     * Records a host key seen for the first time.
+     *
+     * @param con    DB connection
+     * @param status {@link KnownHostKey#TRUSTED} under accept-new, or
+     *               {@link KnownHostKey#PENDING} under strict verification
+     */
+    public static void insertHostKey(Connection con, String host, int port, String type, String publicKey,
+                                     String fingerprint, String status) throws SQLException {
+        try (PreparedStatement stmt = con.prepareStatement(
                      "insert into host_key (host, port, type, public_key, fingerprint, status)"
                              + " values (?,?,?,?,?,?)")) {
             stmt.setString(1, host);
@@ -143,8 +177,24 @@ public class HostKeyDB {
      */
     public static void markChanged(String host, int port, String type,
                                    String offeredPublicKey, String offeredFingerprint) throws SQLException, GeneralSecurityException {
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement(
+
+        try (Connection con = DBUtils.getConn()) {
+            markChanged(con, host, port, type, offeredPublicKey, offeredFingerprint);
+        }
+    }
+
+    /**
+     * Flags a host as presenting a key other than its trusted one, keeping both.
+     * <p>
+     * The offered key is stored beside the trusted key rather than replacing it: overwriting
+     * is what a machine-in-the-middle wants, and a manager needs to see which key they
+     * approved and which one turned up in order to tell a re-provisioned host from an attack.
+     *
+     * @param con DB connection
+     */
+    public static void markChanged(Connection con, String host, int port, String type,
+                                   String offeredPublicKey, String offeredFingerprint) throws SQLException {
+        try (PreparedStatement stmt = con.prepareStatement(
                      "update host_key set status=?, offered_public_key=?, offered_fingerprint=?"
                              + " where host=? and port=? and type=?")) {
             stmt.setString(1, KnownHostKey.CHANGED);
@@ -167,8 +217,22 @@ public class HostKeyDB {
      * @param userId the manager approving it, recorded for the audit trail
      */
     public static void approveHostKey(Long id, Long userId) throws SQLException, GeneralSecurityException {
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement(
+
+        try (Connection con = DBUtils.getConn()) {
+            approveHostKey(con, id, userId);
+        }
+    }
+
+    /**
+     * Trusts a host key: approves a pending one, or accepts the newly offered key of a
+     * changed one as the trusted key from now on.
+     *
+     * @param con    DB connection
+     * @param id     host key row id
+     * @param userId the manager approving it, recorded for the audit trail
+     */
+    public static void approveHostKey(Connection con, Long id, Long userId) throws SQLException {
+        try (PreparedStatement stmt = con.prepareStatement(
                      "update host_key set"
                              + " public_key = coalesce(offered_public_key, public_key),"
                              + " fingerprint = coalesce(offered_fingerprint, fingerprint),"
@@ -195,8 +259,21 @@ public class HostKeyDB {
      * under accept-new.
      */
     public static void revokeHostKey(Long id) throws SQLException, GeneralSecurityException {
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement("update host_key set status=? where id=?")) {
+
+        try (Connection con = DBUtils.getConn()) {
+            revokeHostKey(con, id);
+        }
+    }
+
+    /**
+     * Distrusts a host key without forgetting it, so connections stay refused rather than
+     * the host being silently re-trusted on its next connection the way a delete would allow
+     * under accept-new.
+     *
+     * @param con DB connection
+     */
+    public static void revokeHostKey(Connection con, Long id) throws SQLException {
+        try (PreparedStatement stmt = con.prepareStatement("update host_key set status=? where id=?")) {
             stmt.setString(1, KnownHostKey.REVOKED);
             stmt.setLong(2, id);
             stmt.executeUpdate();
@@ -209,8 +286,19 @@ public class HostKeyDB {
      * Forgets a host key entirely, so the next connection treats the host as new.
      */
     public static void deleteHostKey(Long id) throws SQLException, GeneralSecurityException {
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement("delete from host_key where id=?")) {
+
+        try (Connection con = DBUtils.getConn()) {
+            deleteHostKey(con, id);
+        }
+    }
+
+    /**
+     * Forgets a host key entirely, so the next connection treats the host as new.
+     *
+     * @param con DB connection
+     */
+    public static void deleteHostKey(Connection con, Long id) throws SQLException {
+        try (PreparedStatement stmt = con.prepareStatement("delete from host_key where id=?")) {
             stmt.setLong(1, id);
             stmt.executeUpdate();
         }
@@ -225,9 +313,23 @@ public class HostKeyDB {
      * revoked key is refused on the host certificate path as well as by direct comparison.
      */
     public static List<KnownHostKey> getRevokedHostKeys() throws SQLException, GeneralSecurityException {
+
+        try (Connection con = DBUtils.getConn()) {
+            return getRevokedHostKeys(con);
+        }
+    }
+
+    /**
+     * @param con DB connection
+     * @return host keys a manager has explicitly distrusted
+     * <p>
+     * Published to JSch as {@code @revoked} entries by HostKeyVerifier.getHostKey(), so a
+     * revoked key is refused on the host certificate path as well as by direct comparison.
+     *
+     */
+    public static List<KnownHostKey> getRevokedHostKeys(Connection con) throws SQLException {
         List<KnownHostKey> revoked = new ArrayList<>();
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement(
+        try (PreparedStatement stmt = con.prepareStatement(
                      "select k.*, null as approved_by_username from host_key k where k.status = ?")) {
             stmt.setString(1, KnownHostKey.REVOKED);
             try (ResultSet rs = stmt.executeQuery()) {
@@ -243,8 +345,18 @@ public class HostKeyDB {
      * @return number of host keys currently refusing connections, for the nav badge
      */
     public static int getBlockingCount() throws SQLException, GeneralSecurityException {
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement(
+
+        try (Connection con = DBUtils.getConn()) {
+            return getBlockingCount(con);
+        }
+    }
+
+    /**
+     * @param con DB connection
+     * @return number of host keys currently refusing connections, for the nav badge
+     */
+    public static int getBlockingCount(Connection con) throws SQLException {
+        try (PreparedStatement stmt = con.prepareStatement(
                      "select count(*) from host_key where status <> ?")) {
             stmt.setString(1, KnownHostKey.TRUSTED);
             try (ResultSet rs = stmt.executeQuery()) {

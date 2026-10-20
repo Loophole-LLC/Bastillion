@@ -100,6 +100,20 @@ public class SessionAuditDB {
      * @return session list
      */
     public static SortedSet getSessions(SortedSet sortedSet) throws SQLException, GeneralSecurityException {
+
+        try (Connection con = DBUtils.getConn()) {
+            return getSessions(con, sortedSet);
+        }
+    }
+
+    /**
+     * returns sessions based on sort order defined
+     *
+     * @param con       DB connection
+     * @param sortedSet object that defines sort order
+     * @return session list
+     */
+    public static SortedSet getSessions(Connection con, SortedSet sortedSet) throws SQLException {
         List<SessionAudit> outputList = new LinkedList<>();
 
         String orderBy = sortedSet.toOrderByClause(SORTABLE_FIELDS);
@@ -109,30 +123,28 @@ public class SessionAuditDB {
         sql += StringUtils.isNotEmpty(sortedSet.getFilterMap().get(FILTER_BY_SYSTEM)) ? " and session_log.id in ( select session_id from terminal_log where terminal_log.display_nm like ?) " : "";
         sql += orderBy;
 
-        try (Connection con = DBUtils.getConn()) {
-            deleteAuditHistory(con);
+        deleteAuditHistory(con);
 
-            try (PreparedStatement stmt = con.prepareStatement(sql)) {
-                int i = 1;
-                //set filters in prepared statement
-                if (StringUtils.isNotEmpty(sortedSet.getFilterMap().get(FILTER_BY_USER))) {
-                    stmt.setString(i++, sortedSet.getFilterMap().get(FILTER_BY_USER));
-                }
-                if (StringUtils.isNotEmpty(sortedSet.getFilterMap().get(FILTER_BY_SYSTEM))) {
-                    stmt.setString(i, sortedSet.getFilterMap().get(FILTER_BY_SYSTEM));
-                }
+        try (PreparedStatement stmt = con.prepareStatement(sql)) {
+            int i = 1;
+            //set filters in prepared statement
+            if (StringUtils.isNotEmpty(sortedSet.getFilterMap().get(FILTER_BY_USER))) {
+                stmt.setString(i++, sortedSet.getFilterMap().get(FILTER_BY_USER));
+            }
+            if (StringUtils.isNotEmpty(sortedSet.getFilterMap().get(FILTER_BY_SYSTEM))) {
+                stmt.setString(i, sortedSet.getFilterMap().get(FILTER_BY_SYSTEM));
+            }
 
-                try (ResultSet rs = stmt.executeQuery()) {
-                    while (rs.next()) {
-                        SessionAudit sessionAudit = new SessionAudit();
-                        sessionAudit.setId(rs.getLong("session_log.id"));
-                        sessionAudit.setSessionTm(rs.getTimestamp("session_tm"));
-                        sessionAudit.setFirstNm(rs.getString("first_nm"));
-                        sessionAudit.setLastNm(rs.getString("last_nm"));
-                        sessionAudit.setIpAddress(rs.getString("ip_address"));
-                        sessionAudit.setUsername(rs.getString("username"));
-                        outputList.add(sessionAudit);
-                    }
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    SessionAudit sessionAudit = new SessionAudit();
+                    sessionAudit.setId(rs.getLong("session_log.id"));
+                    sessionAudit.setSessionTm(rs.getTimestamp("session_tm"));
+                    sessionAudit.setFirstNm(rs.getString("first_nm"));
+                    sessionAudit.setLastNm(rs.getString("last_nm"));
+                    sessionAudit.setIpAddress(rs.getString("ip_address"));
+                    sessionAudit.setUsername(rs.getString("username"));
+                    outputList.add(sessionAudit);
                 }
             }
         }
@@ -378,11 +390,24 @@ public class SessionAuditDB {
      */
     public static SessionAudit getSessionsTerminals(Long sessionId) throws SQLException, GeneralSecurityException {
 
+        try (Connection con = DBUtils.getConn()) {
+            return getSessionsTerminals(con, sessionId);
+        }
+    }
+
+    /**
+     * returns a list of terminal sessions for session id
+     *
+     * @param con       DB connection
+     * @param sessionId session id
+     * @return terminal sessions with host information
+     */
+    public static SessionAudit getSessionsTerminals(Connection con, Long sessionId) throws SQLException {
+
         SessionAudit sessionAudit = new SessionAudit();
         String sql = "select * from session_log where session_log.id = ? ";
 
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement(sql)) {
+        try (PreparedStatement stmt = con.prepareStatement(sql)) {
             stmt.setLong(1, sessionId);
 
             try (ResultSet rs = stmt.executeQuery()) {

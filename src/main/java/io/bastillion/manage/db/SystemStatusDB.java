@@ -36,24 +36,37 @@ public class SystemStatusDB {
      * @param userType        user type
      */
     public static void setInitialSystemStatus(List<Long> systemSelectIds, Long userId, String userType) throws SQLException, GeneralSecurityException {
+
         try (Connection con = DBUtils.getConn()) {
+            setInitialSystemStatus(con, systemSelectIds, userId, userType);
+        }
+    }
 
-            //checks perms if to see if in assigned profiles
-            if (!Auth.MANAGER.equals(userType)) {
-                systemSelectIds = SystemDB.checkSystemPerms(con, systemSelectIds, userId);
-            }
+    /**
+     * set the initial status for selected systems
+     *
+     * @param con             DB connection
+     * @param systemSelectIds systems ids to set initial status
+     * @param userId          user id
+     * @param userType        user type
+     */
+    public static void setInitialSystemStatus(Connection con, List<Long> systemSelectIds, Long userId, String userType) throws SQLException {
 
-            //deletes all old systems
-            deleteAllSystemStatus(con, userId);
-            for (Long hostSystemId : systemSelectIds) {
+        //checks perms if to see if in assigned profiles
+        if (!Auth.MANAGER.equals(userType)) {
+            systemSelectIds = SystemDB.checkSystemPerms(con, systemSelectIds, userId);
+        }
 
-                HostSystem hostSystem = new HostSystem();
-                hostSystem.setId(hostSystemId);
-                hostSystem.setStatusCd(HostSystem.INITIAL_STATUS);
+        //deletes all old systems
+        deleteAllSystemStatus(con, userId);
+        for (Long hostSystemId : systemSelectIds) {
 
-                //insert new status
-                insertSystemStatus(con, hostSystem, userId);
-            }
+            HostSystem hostSystem = new HostSystem();
+            hostSystem.setId(hostSystemId);
+            hostSystem.setStatusCd(HostSystem.INITIAL_STATUS);
+
+            //insert new status
+            insertSystemStatus(con, hostSystem, userId);
         }
     }
 
@@ -166,10 +179,23 @@ public class SystemStatusDB {
      */
     public static HostSystem getSystemStatus(Long systemId, Long userId) throws SQLException, GeneralSecurityException {
 
+        try (Connection con = DBUtils.getConn()) {
+            return getSystemStatus(con, systemId, userId);
+        }
+    }
+
+    /**
+     * returns key placement status of system
+     *
+     * @param con      DB connection
+     * @param systemId system id
+     * @param userId   user id
+     */
+    public static HostSystem getSystemStatus(Connection con, Long systemId, Long userId) throws SQLException {
+
         HostSystem hostSystem = null;
 
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement("select * from status where id=? and user_id=?")) {
+        try (PreparedStatement stmt = con.prepareStatement("select * from status where id=? and user_id=?")) {
             stmt.setLong(1, systemId);
             stmt.setLong(2, userId);
             try (ResultSet rs = stmt.executeQuery()) {
@@ -192,10 +218,23 @@ public class SystemStatusDB {
      */
     public static HostSystem getNextPendingSystem(Long userId) throws SQLException, GeneralSecurityException {
 
+        try (Connection con = DBUtils.getConn()) {
+            return getNextPendingSystem(con, userId);
+        }
+    }
+
+    /**
+     * returns the first system that authorized keys has not been tried
+     *
+     * @param con    DB connection
+     * @param userId user id
+     * @return hostSystem systems for authorized_keys replacement
+     */
+    public static HostSystem getNextPendingSystem(Connection con, Long userId) throws SQLException {
+
         HostSystem hostSystem = null;
 
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement("select * from status where (status_cd like ? or status_cd like ? or status_cd like ?) and user_id=? order by id asc")) {
+        try (PreparedStatement stmt = con.prepareStatement("select * from status where (status_cd like ? or status_cd like ? or status_cd like ?) and user_id=? order by id asc")) {
             stmt.setString(1, HostSystem.INITIAL_STATUS);
             stmt.setString(2, HostSystem.AUTH_FAIL_STATUS);
             stmt.setString(3, HostSystem.PUBLIC_KEY_FAIL_STATUS);
