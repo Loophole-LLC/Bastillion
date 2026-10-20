@@ -6,9 +6,6 @@
 package io.bastillion.manage.util;
 
 import io.bastillion.common.util.AppConfig;
-import io.bastillion.manage.db.AuthDB;
-import io.bastillion.manage.db.UserDB;
-import io.bastillion.manage.db.UserProfileDB;
 import io.bastillion.manage.model.Auth;
 import io.bastillion.manage.model.User;
 import org.apache.commons.lang3.StringUtils;
@@ -43,7 +40,6 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 
 /**
@@ -109,7 +105,15 @@ public class ExternalAuthUtil {
 
                 con = DBUtils.getConn();
 
-                User user = AuthDB.getUserByUID(con, auth.getUsername());
+                //what the login modules say about this user - name and email are only used if
+                //the account has to be created, roles only if a module can enumerate them
+                User newUser = new User();
+                newUser.setUsername(auth.getUsername());
+                if (auth.getUsername().contains("@")) {
+                    newUser.setEmail(auth.getUsername());
+                }
+                List<String> allRoles = null;
+                List<String> assignedRoles = null;
 
                 Field field = LoginContext.class.getDeclaredField("moduleStack");
                 field.setAccessible(true);
@@ -168,48 +172,36 @@ public class ExternalAuthUtil {
                         field.setAccessible(true);
                         Attributes userAttributes = (Attributes) field.get(userInfo);
 
-                        List<String> allRoles = getAllRoles(dirContext, roleBaseDn, roleNameAttribute, roleObjectClass);
+                        allRoles = getAllRoles(dirContext, roleBaseDn, roleNameAttribute, roleObjectClass);
+                        assignedRoles = userInfo.doFetchRoles();
 
-                        if (user == null) {
-                            user = new User();
-                            user.setUserType(User.ADMINISTRATOR);
-                            user.setUsername(auth.getUsername());
+                        // set attributes from ldap
+                        String givenName = userAttributes.get("givenName") != null ? (String) userAttributes.get("givenName").get() : null;
+                        String sn = userAttributes.get("sn") != null ? (String) userAttributes.get("sn").get() : null;
+                        String displayName = userAttributes.get("displayName") != null ? (String) userAttributes.get("displayName").get() : null;
+                        String cn = userAttributes.get("cn") != null ? (String) userAttributes.get("cn").get() : null;
+                        String email = userAttributes.get("mail") != null ? (String) userAttributes.get("mail").get() : null;
 
-                            // set attributes from ldap
-                            String givenName = userAttributes.get("givenName") != null ? (String) userAttributes.get("givenName").get() : null;
-                            String sn = userAttributes.get("sn") != null ? (String) userAttributes.get("sn").get() : null;
-                            String displayName = userAttributes.get("displayName") != null ? (String) userAttributes.get("displayName").get() : null;
-                            String cn = userAttributes.get("cn") != null ? (String) userAttributes.get("cn").get() : null;
-                            String email = userAttributes.get("mail") != null ? (String) userAttributes.get("mail").get() : null;
-
-                            if (StringUtils.isNotEmpty(givenName) && StringUtils.isNotEmpty(sn)) {
-                                user.setFirstNm(givenName);
-                                user.setLastNm(sn);
-                            } else if (StringUtils.isNotEmpty(displayName) && displayName.contains(" ")) {
-                                String[] name = displayName.split(" ");
-                                if (name.length > 1) {
-                                    user.setFirstNm(name[0]);
-                                    user.setLastNm(name[name.length - 1]);
-                                }
-                            } else if (StringUtils.isNotEmpty(cn) && cn.contains(" ")) {
-                                String[] name = cn.split(" ");
-                                if (name.length > 1) {
-                                    user.setFirstNm(name[0]);
-                                    user.setLastNm(name[name.length - 1]);
-                                }
+                        if (StringUtils.isNotEmpty(givenName) && StringUtils.isNotEmpty(sn)) {
+                            newUser.setFirstNm(givenName);
+                            newUser.setLastNm(sn);
+                        } else if (StringUtils.isNotEmpty(displayName) && displayName.contains(" ")) {
+                            String[] name = displayName.split(" ");
+                            if (name.length > 1) {
+                                newUser.setFirstNm(name[0]);
+                                newUser.setLastNm(name[name.length - 1]);
                             }
-
-                            //set email
-                            if (StringUtils.isNotEmpty(email)) {
-                                user.setEmail(email);
-                            } else if (auth.getUsername().contains("@")) {
-                                user.setEmail(auth.getUsername());
+                        } else if (StringUtils.isNotEmpty(cn) && cn.contains(" ")) {
+                            String[] name = cn.split(" ");
+                            if (name.length > 1) {
+                                newUser.setFirstNm(name[0]);
+                                newUser.setLastNm(name[name.length - 1]);
                             }
-                            user.setId(UserDB.insertUser(con, user));
                         }
 
-                        //assign profiles for user
-                        UserProfileDB.assignProfilesToUser(con, user.getId(), allRoles, userInfo.doFetchRoles());
+                        if (StringUtils.isNotEmpty(email)) {
+                            newUser.setEmail(email);
+                        }
 
                         dirContext.close();
                         loginModule.commit();
@@ -218,41 +210,21 @@ public class ExternalAuthUtil {
 
                         Subject subject = loginContext.getSubject();
 
-                        if (user == null) {
-                            user = new User();
-
-                            user.setUserType(User.ADMINISTRATOR);
-                            user.setUsername(auth.getUsername());
-
-                            //if it looks like name is returned default it
-                            for (Principal p : subject.getPrincipals()) {
-                                if (p.getName().contains(" ")) {
-                                    String[] name = p.getName().split(" ");
-                                    if (name.length > 1) {
-                                        user.setFirstNm(name[0]);
-                                        user.setLastNm(name[name.length - 1]);
-                                    }
+                        //if it looks like name is returned default it
+                        for (Principal p : subject.getPrincipals()) {
+                            if (p.getName().contains(" ")) {
+                                String[] name = p.getName().split(" ");
+                                if (name.length > 1) {
+                                    newUser.setFirstNm(name[0]);
+                                    newUser.setLastNm(name[name.length - 1]);
                                 }
                             }
-
-                            //set email
-                            if (auth.getUsername().contains("@")) {
-                                user.setEmail(auth.getUsername());
-                            }
-                            user.setId(UserDB.insertUser(con, user));
                         }
 
                     }
-                    if (StringUtils.isNotEmpty(DEFAULT_LDAP_PROFILE)) {
-                        UserProfileDB.assignProfileToUser(con, user.getId(), DEFAULT_LDAP_PROFILE);
-                    }
-
-                    authToken = UUID.randomUUID().toString();
-                    user.setAuthToken(authToken);
-                    user.setAuthType(Auth.AUTH_EXTERNAL);
-                    //set auth token
-                    AuthDB.updateLogin(con, user);
                 }
+
+                authToken = ExternalAccountUtil.link(con, newUser, Auth.AUTH_EXTERNAL, allRoles, assignedRoles, DEFAULT_LDAP_PROFILE);
             } catch (LoginException le) {
                 authToken = null;
                 log.debug(le.toString(), le);

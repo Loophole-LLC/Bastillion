@@ -10,10 +10,7 @@ import com.onelogin.saml2.http.HttpRequest;
 import com.onelogin.saml2.settings.Saml2Settings;
 import io.bastillion.common.saml.SamlSettingsUtil;
 import io.bastillion.common.util.AppConfig;
-import io.bastillion.manage.db.AuthDB;
 import io.bastillion.manage.db.ProfileDB;
-import io.bastillion.manage.db.UserDB;
-import io.bastillion.manage.db.UserProfileDB;
 import io.bastillion.manage.model.Auth;
 import io.bastillion.manage.model.Profile;
 import io.bastillion.manage.model.User;
@@ -29,15 +26,13 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 /**
  * External authentication utility for SAML 2.0 SSO (e.g. Microsoft Entra ID). Mirrors
  * ExternalAuthUtil's shape for JAAS/LDAP: validate the incoming credential (there, a
- * username/password against a JAAS LoginModule; here, an IdP-signed assertion), provision or
- * update the matching User row, map the IdP's role/group claim onto Bastillion profiles via
- * the same UserProfileDB methods LDAP already uses, and hand back a fresh auth token for
- * AuthDB.updateLogin to persist.
+ * username/password against a JAAS LoginModule; here, an IdP-signed assertion), then hand the
+ * NameID and the IdP's role/group claim to ExternalAccountUtil, which links it to a local
+ * account, syncs profiles and issues the auth token.
  */
 public class SamlAuthUtil {
 
@@ -91,36 +86,18 @@ public class SamlAuthUtil {
 
             con = DBUtils.getConn();
 
-            User user = AuthDB.getUserByUID(con, username);
-            if (user == null) {
-                user = new User();
-                user.setUserType(User.ADMINISTRATOR);
-                user.setUsername(username);
-                user.setId(UserDB.insertUser(con, user));
-            }
-
-            //map the assertion's role/group claim onto Bastillion profiles - same mechanism
-            //as LDAP: recompute this user's profile membership from what the current login
-            //asserts. Unlike LDAP (which can enumerate every role the directory knows about
-            //via getAllRoles()), a SAML assertion only ever tells us this user's roles, so
-            //allProfilesNmList is every Bastillion-side profile name instead - functionally
-            //equivalent input to assignProfilesToUser, which just adds/removes membership
-            //for whichever of those names it's given.
+            //a SAML assertion only ever tells us this user's roles, so unlike LDAP (which can
+            //enumerate every role the directory knows about via getAllRoles()) the names to
+            //recompute membership for are every Bastillion-side profile name instead
             List<String> assignedRoles = samlResponse.getAttributes().getOrDefault(ROLE_ATTRIBUTE, new ArrayList<>());
             List<String> allProfileNames = new ArrayList<>();
-            for (Profile profile : ProfileDB.getAllProfiles()) {
+            for (Profile profile : ProfileDB.getAllProfiles(con)) {
                 allProfileNames.add(profile.getNm());
             }
-            UserProfileDB.assignProfilesToUser(con, user.getId(), allProfileNames, assignedRoles);
 
-            if (StringUtils.isNotEmpty(DEFAULT_SAML_PROFILE)) {
-                UserProfileDB.assignProfileToUser(con, user.getId(), DEFAULT_SAML_PROFILE);
-            }
-
-            authToken = UUID.randomUUID().toString();
-            user.setAuthToken(authToken);
-            user.setAuthType(Auth.AUTH_SAML);
-            AuthDB.updateLogin(con, user);
+            User newUser = new User();
+            newUser.setUsername(username);
+            authToken = ExternalAccountUtil.link(con, newUser, Auth.AUTH_SAML, allProfileNames, assignedRoles, DEFAULT_SAML_PROFILE);
 
         } catch (Exception ex) {
             authToken = null;

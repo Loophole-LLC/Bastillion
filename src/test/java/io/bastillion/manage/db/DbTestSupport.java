@@ -27,7 +27,7 @@ public final class DbTestSupport {
         Connection con = DriverManager.getConnection(
                 "jdbc:h2:mem:bastillion_test_" + UUID.randomUUID() + ";DB_CLOSE_DELAY=-1", "sa", "");
         try (Statement stmt = con.createStatement()) {
-            stmt.executeUpdate("create table users (id INTEGER PRIMARY KEY AUTO_INCREMENT, first_nm varchar, last_nm varchar, email varchar, username varchar not null unique, password varchar, auth_type varchar not null default 'BASIC', user_type varchar not null default 'A', salt varchar, last_login_tm timestamp, expiration_tm timestamp)");
+            stmt.executeUpdate("create table users (id INTEGER PRIMARY KEY AUTO_INCREMENT, first_nm varchar, last_nm varchar, email varchar, username varchar not null unique, password varchar, auth_token varchar, auth_type varchar not null default 'BASIC', user_type varchar not null default 'A', salt varchar, otp_secret varchar, last_login_tm timestamp, expiration_tm timestamp)");
             stmt.executeUpdate("create table system (id INTEGER PRIMARY KEY AUTO_INCREMENT, display_nm varchar not null, username varchar not null, host varchar not null, port INTEGER not null, authorized_keys varchar not null, status_cd varchar not null default 'INITIAL')");
             stmt.executeUpdate("create table profiles (id INTEGER PRIMARY KEY AUTO_INCREMENT, nm varchar not null, desc varchar not null)");
             stmt.executeUpdate("create table system_map (profile_id INTEGER, system_id INTEGER, foreign key (profile_id) references profiles(id) on delete cascade, foreign key (system_id) references system(id) on delete cascade, primary key (profile_id, system_id))");

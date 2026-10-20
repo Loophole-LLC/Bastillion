@@ -232,7 +232,9 @@ default password is public, so deal with it before adding any systems:
    to local accounts by username, so a directory or IdP identity named `admin` would sign
    in as this account; SAML logins also skip two-factor. If you want a local break-glass
    account, give it a name your directory can never issue, a strong password, and
-   two-factor.
+   two-factor. Setting `externalAuthLinkBasicAccounts=false` makes Bastillion refuse an
+   external login that matches any Basic account, so a local account stays local until
+   you switch it to **External** under **Manage → Users**.
 4. **Limit who can reach the login page.** Put Bastillion on a management network or VPN,
    or behind a reverse proxy that only allows trusted source addresses.
 
