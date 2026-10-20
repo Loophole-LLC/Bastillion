@@ -263,6 +263,10 @@ public class AuthDB {
     /**
      * returns user base on username
      *
+     * Exact (case-insensitive) match only - uid comes from an external identity (SAML NameID
+     * or LDAP login name), so it must never be treated as a LIKE pattern where % or _ would
+     * match some other account.
+     *
      * @param con DB connection
      * @param uid username id
      * @return user object
@@ -270,11 +274,16 @@ public class AuthDB {
     public static User getUserByUID(Connection con, String uid) throws SQLException {
 
         User user = null;
-        try (PreparedStatement stmt = con.prepareStatement("select * from  users where lower(username) like lower(?)")) {
+        try (PreparedStatement stmt = con.prepareStatement("select * from users where lower(username) = lower(?)")) {
             stmt.setString(1, uid);
             try (ResultSet rs = stmt.executeQuery()) {
 
                 while (rs.next()) {
+                    //usernames differing only by case are ambiguous - refuse rather than
+                    //silently pick one of the accounts
+                    if (user != null) {
+                        throw new SQLException("Multiple users match username " + uid);
+                    }
                     user = new User();
                     user.setId(rs.getLong("id"));
                     user.setFirstNm(rs.getString("first_nm"));
