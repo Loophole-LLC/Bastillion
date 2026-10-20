@@ -253,7 +253,7 @@ Build and run (packages a self-contained jar with an embedded Jetty server — s
 `io.bastillion.Main` — and runs it):
 ```bash
 mvn package
-java -jar target/bastillion-6.0.0.jar
+java -jar target/bastillion-6.0.1.jar
 ```
 
 Or for local dev without repackaging on every change:
@@ -879,7 +879,7 @@ cd tools/migrate
 #    stop it (Ctrl+C) once it's finished booting - this creates the schema, jceks, and
 #    default admin user.
 cd ../..
-java -DCONFIG_DIR=/data/bastillion/ -jar target/bastillion-6.0.0.jar
+java -DCONFIG_DIR=/data/bastillion/ -jar target/bastillion-6.0.1.jar
 
 # 3. Import into the new database (full replace of all 12 tables)
 cd tools/migrate

@@ -4,6 +4,25 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [6.0.1]
+
+### Security
+
+- **High: SAML/LDAP login could sign in as a different user.** `AuthDB.getUserByUID` matched the SAML NameID or LDAP login name with `lower(username) like lower(?)`, so `%` and `_` in it acted as wildcards, and when several accounts matched, the last row won. An IdP identity such as `john_smith@corp.com` signed in as `john.smith@corp.com`, up to Full Access. Logging in also rotated the victim's auth token, logging them out, cleared their local password, and on SAML rewrote their profile membership from the attacker's role claims. The lookup is now an exact case-insensitive match, and a login that matches more than one account is refused. `UserDB.isUnique` had the same `LIKE` and wrongly reported usernames containing `_` as taken; it now matches exactly too. Reported by @a25370 (GHSA-5qgc-52c7-26mg).
+
+### Changed
+
+- The README now recommends locking down the default `admin` account: change its password, require two-factor, and delete it on LDAP/SAML deployments once a directory user has Full Access, since an external identity named exactly `admin` would sign in as it.
+
+### Dependencies
+
+- `com.github.mwiede:jsch` 2.28.7 → 2.28.8
+- `org.apache.mina:mina-core` 2.2.9 → 2.2.10
+- `commons-codec:commons-codec` 1.22.1 → 1.23.0
+- `github/codeql-action` 4.38.2 → 4.39.0
+
+**Upgrade note:** upgrade promptly if you use SAML or LDAP login; local-only installs are not affected by the login issue. No config or schema changes. A local account that was matched this way had its password cleared, so a user whose local password suddenly stopped working is worth checking.
+
 ## [6.0.0]
 
 ### Security
