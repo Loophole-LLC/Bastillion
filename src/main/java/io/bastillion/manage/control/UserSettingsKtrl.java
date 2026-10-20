@@ -13,6 +13,7 @@ import io.bastillion.manage.db.CertAuthorityDB;
 import io.bastillion.manage.db.PrivateKeyDB;
 import io.bastillion.manage.db.SystemDB;
 import io.bastillion.manage.db.UserThemeDB;
+import io.bastillion.manage.model.ApplicationKey;
 import io.bastillion.manage.model.Auth;
 import io.bastillion.manage.model.CertAuthority;
 import io.bastillion.manage.model.UserSettings;
@@ -68,22 +69,19 @@ public class UserSettingsKtrl extends BaseKontroller {
             entry("White on black", "#000000,#FFFFFF")
     )));
 
-    // Deliberately global: this is the one application SSH key, the same for every user, and
-    // a manager replacing it through importKey() must change what everyone else is shown.
-    // volatile so that write is visible to the request threads reading it. It must never be
-    // settable from a request parameter - the page tells users to install this key in
-    // authorized_keys, so an attacker who could overwrite it could have users authorize a
-    // key of the attacker's choosing. BaseKontroller's binder skips static fields for that
-    // reason; this is not a per-request model value.
-    @Model(name = "publicKey")
-    static volatile String publicKey;
+    // The one application SSH key, the same for every user, read fresh on every request so a
+    // manager replacing it through importAppKeySubmit() changes what everyone is shown. It
+    // must never be settable from a request parameter - the page tells users to install this
+    // key in authorized_keys, so a link that could set it could have a user authorize a key
+    // of the attacker's choosing - hence bindable = false.
+    @Model(name = "publicKey", bindable = false)
+    String publicKey;
 
     // Shown next to the application public key because they answer the same question - what
     // Bastillion presents to a host. (Manage -> Host Keys covers the opposite direction: what
-    // hosts present to us.) Global and effectively fixed, like publicKey above, and equally
-    // off-limits to the request binder because it is static.
-    @Model(name = "certAuthorityPublicKey")
-    static volatile String certAuthorityPublicKey;
+    // hosts present to us.) Output only, like publicKey above.
+    @Model(name = "certAuthorityPublicKey", bindable = false)
+    String certAuthorityPublicKey;
 
     @Model(name = "certificateAuthEnabled")
     Boolean certificateAuthEnabled = SshCertificateAuth.isEnabled();
@@ -107,9 +105,11 @@ public class UserSettingsKtrl extends BaseKontroller {
     @Model(name = "systemCount")
     Integer systemCount;
 
-    static {
+    public UserSettingsKtrl(HttpServletRequest request, HttpServletResponse response) {
+        super(request, response);
         try {
-            publicKey = PrivateKeyDB.getApplicationKey().getPublicKey();
+            ApplicationKey appKey = PrivateKeyDB.getApplicationKey();
+            publicKey = appKey == null ? null : appKey.getPublicKey();
         } catch (SQLException | GeneralSecurityException ex) {
             log.error(ex.toString(), ex);
         }
@@ -119,11 +119,6 @@ public class UserSettingsKtrl extends BaseKontroller {
         } catch (SQLException | GeneralSecurityException ex) {
             log.error(ex.toString(), ex);
         }
-    }
-
-
-    public UserSettingsKtrl(HttpServletRequest request, HttpServletResponse response) {
-        super(request, response);
     }
 
     @Kontrol(path = "/admin/userSettings", method = MethodType.GET)

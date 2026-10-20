@@ -15,5 +15,11 @@ import java.lang.annotation.Target;
 
 public @interface Model {
     String name();
+
+    /**
+     * false for a value the controller sets for the view and a request must never supply -
+     * the request binder skips the field, as it skips every static field
+     */
+    boolean bindable() default true;
 }
 

@@ -345,9 +345,14 @@ public class BaseKontroller {
      * rendered for everybody, and {@code ?someMap['k']=v} would have grown a shared map
      * without bound. A static final field is worse only in that {@code Field.set} refuses it
      * outright, turning any request that happened to name one into a 500.
+     * <p>
+     * A field marked {@code @Model(bindable = false)} is output only: the controller sets it
+     * for the view, so a parameter naming it could only put a value of the requester's
+     * choosing on the page.
      */
     private static boolean isNotBindable(Field field) {
-        return Modifier.isStatic(field.getModifiers());
+        Model model = field.getAnnotation(Model.class);
+        return Modifier.isStatic(field.getModifiers()) || (model != null && !model.bindable());
     }
 
     private void setFieldFromParams(Object ctrl, String param, HttpServletRequest request)

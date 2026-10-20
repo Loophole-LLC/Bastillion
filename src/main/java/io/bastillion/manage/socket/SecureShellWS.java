@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -202,96 +203,98 @@ public class SecureShellWS {
     /**
      * Maps key press events to the ascii values
      */
-    static Map<Integer, byte[]> keyMap = new HashMap<>();
+    static final Map<Integer, byte[]> keyMap;
 
     static {
+        Map<Integer, byte[]> map = new HashMap<>();
         //ESC
-        keyMap.put(27, new byte[]{(byte) 0x1b});
+        map.put(27, new byte[]{(byte) 0x1b});
         //ENTER
-        keyMap.put(13, new byte[]{(byte) 0x0d});
+        map.put(13, new byte[]{(byte) 0x0d});
         //LEFT
-        keyMap.put(37, new byte[]{(byte) 0x1b, (byte) 0x4f, (byte) 0x44});
+        map.put(37, new byte[]{(byte) 0x1b, (byte) 0x4f, (byte) 0x44});
         //UP
-        keyMap.put(38, new byte[]{(byte) 0x1b, (byte) 0x4f, (byte) 0x41});
+        map.put(38, new byte[]{(byte) 0x1b, (byte) 0x4f, (byte) 0x41});
         //RIGHT
-        keyMap.put(39, new byte[]{(byte) 0x1b, (byte) 0x4f, (byte) 0x43});
+        map.put(39, new byte[]{(byte) 0x1b, (byte) 0x4f, (byte) 0x43});
         //DOWN
-        keyMap.put(40, new byte[]{(byte) 0x1b, (byte) 0x4f, (byte) 0x42});
+        map.put(40, new byte[]{(byte) 0x1b, (byte) 0x4f, (byte) 0x42});
         //BS
-        keyMap.put(8, new byte[]{(byte) 0x7f});
+        map.put(8, new byte[]{(byte) 0x7f});
         //TAB
-        keyMap.put(9, new byte[]{(byte) 0x09});
+        map.put(9, new byte[]{(byte) 0x09});
         //CTR
-        keyMap.put(17, new byte[]{});
+        map.put(17, new byte[]{});
         //DEL
-        keyMap.put(46, "\033[3~".getBytes());
+        map.put(46, "\033[3~".getBytes());
         //CTR-A
-        keyMap.put(65, new byte[]{(byte) 0x01});
+        map.put(65, new byte[]{(byte) 0x01});
         //CTR-B
-        keyMap.put(66, new byte[]{(byte) 0x02});
+        map.put(66, new byte[]{(byte) 0x02});
         //CTR-C
-        keyMap.put(67, new byte[]{(byte) 0x03});
+        map.put(67, new byte[]{(byte) 0x03});
         //CTR-D
-        keyMap.put(68, new byte[]{(byte) 0x04});
+        map.put(68, new byte[]{(byte) 0x04});
         //CTR-E
-        keyMap.put(69, new byte[]{(byte) 0x05});
+        map.put(69, new byte[]{(byte) 0x05});
         //CTR-F
-        keyMap.put(70, new byte[]{(byte) 0x06});
+        map.put(70, new byte[]{(byte) 0x06});
         //CTR-G
-        keyMap.put(71, new byte[]{(byte) 0x07});
+        map.put(71, new byte[]{(byte) 0x07});
         //CTR-H
-        keyMap.put(72, new byte[]{(byte) 0x08});
+        map.put(72, new byte[]{(byte) 0x08});
         //CTR-I
-        keyMap.put(73, new byte[]{(byte) 0x09});
+        map.put(73, new byte[]{(byte) 0x09});
         //CTR-J
-        keyMap.put(74, new byte[]{(byte) 0x0A});
+        map.put(74, new byte[]{(byte) 0x0A});
         //CTR-K
-        keyMap.put(75, new byte[]{(byte) 0x0B});
+        map.put(75, new byte[]{(byte) 0x0B});
         //CTR-L
-        keyMap.put(76, new byte[]{(byte) 0x0C});
+        map.put(76, new byte[]{(byte) 0x0C});
         //CTR-M
-        keyMap.put(77, new byte[]{(byte) 0x0D});
+        map.put(77, new byte[]{(byte) 0x0D});
         //CTR-N
-        keyMap.put(78, new byte[]{(byte) 0x0E});
+        map.put(78, new byte[]{(byte) 0x0E});
         //CTR-O
-        keyMap.put(79, new byte[]{(byte) 0x0F});
+        map.put(79, new byte[]{(byte) 0x0F});
         //CTR-P
-        keyMap.put(80, new byte[]{(byte) 0x10});
+        map.put(80, new byte[]{(byte) 0x10});
         //CTR-Q
-        keyMap.put(81, new byte[]{(byte) 0x11});
+        map.put(81, new byte[]{(byte) 0x11});
         //CTR-R
-        keyMap.put(82, new byte[]{(byte) 0x12});
+        map.put(82, new byte[]{(byte) 0x12});
         //CTR-S
-        keyMap.put(83, new byte[]{(byte) 0x13});
+        map.put(83, new byte[]{(byte) 0x13});
         //CTR-T
-        keyMap.put(84, new byte[]{(byte) 0x14});
+        map.put(84, new byte[]{(byte) 0x14});
         //CTR-U
-        keyMap.put(85, new byte[]{(byte) 0x15});
+        map.put(85, new byte[]{(byte) 0x15});
         //CTR-V
-        keyMap.put(86, new byte[]{(byte) 0x16});
+        map.put(86, new byte[]{(byte) 0x16});
         //CTR-W
-        keyMap.put(87, new byte[]{(byte) 0x17});
+        map.put(87, new byte[]{(byte) 0x17});
         //CTR-X
-        keyMap.put(88, new byte[]{(byte) 0x18});
+        map.put(88, new byte[]{(byte) 0x18});
         //CTR-Y
-        keyMap.put(89, new byte[]{(byte) 0x19});
+        map.put(89, new byte[]{(byte) 0x19});
         //CTR-Z
-        keyMap.put(90, new byte[]{(byte) 0x1A});
+        map.put(90, new byte[]{(byte) 0x1A});
         //CTR-[
-        keyMap.put(219, new byte[]{(byte) 0x1B});
+        map.put(219, new byte[]{(byte) 0x1B});
         //CTR-]
-        keyMap.put(221, new byte[]{(byte) 0x1D});
+        map.put(221, new byte[]{(byte) 0x1D});
         //INSERT
-        keyMap.put(45, "\033[2~".getBytes());
+        map.put(45, "\033[2~".getBytes());
         //PG UP
-        keyMap.put(33, "\033[5~".getBytes());
+        map.put(33, "\033[5~".getBytes());
         //PG DOWN
-        keyMap.put(34, "\033[6~".getBytes());
+        map.put(34, "\033[6~".getBytes());
         //END
-        keyMap.put(35, "\033[4~".getBytes());
+        map.put(35, "\033[4~".getBytes());
         //HOME
-        keyMap.put(36, "\033[1~".getBytes());
+        map.put(36, "\033[1~".getBytes());
 
+        keyMap = Collections.unmodifiableMap(map);
     }
 
 }

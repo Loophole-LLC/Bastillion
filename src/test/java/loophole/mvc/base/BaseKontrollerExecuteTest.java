@@ -87,6 +87,18 @@ class BaseKontrollerExecuteTest {
         verify(request).setAttribute("greeting", "hello world (42)");
     }
 
+    @Test
+    void doesNotBindRequestParameterIntoOutputOnlyModel() throws Exception {
+        when(request.getServletPath()).thenReturn("/serverValue.ktrl");
+        when(request.getMethod()).thenReturn("POST");
+        // no getParameter stub: the binder must not even read a parameter naming the field
+        when(request.getParameterNames()).thenReturn(Collections.enumeration(java.util.List.of("serverValue")));
+
+        new BaseKontroller(request, response).execute();
+
+        verify(request).setAttribute("serverValue", "set by the controller");
+    }
+
     // --- setFieldFromParams' bracketed-key parsing (tags[env]=prod -> Map.put("env", "prod")) ---
     // Regression coverage for the java/polynomial-redos fix: the key extraction used to
     // chain three replaceAll regexes (".*\\[", "\\'", "\\]. *") over the attacker-controlled

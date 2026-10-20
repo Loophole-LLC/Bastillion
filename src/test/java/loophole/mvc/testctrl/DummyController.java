@@ -36,6 +36,9 @@ public class DummyController extends BaseKontroller {
     @Model(name = "tags")
     private java.util.Map<String, String> tags = new java.util.HashMap<>();
 
+    @Model(name = "serverValue", bindable = false)
+    private String serverValue = "set by the controller";
+
     public static boolean tagsExecuted;
 
     public DummyController(HttpServletRequest request, HttpServletResponse response) {
@@ -71,6 +74,11 @@ public class DummyController extends BaseKontroller {
         echoExecuted = true;
         greeting = "hello " + name + " (" + age + ")";
         return "forward:/echo.html";
+    }
+
+    @Kontrol(path = "/serverValue", method = MethodType.POST)
+    public String showServerValue() {
+        return "forward:/server.html";
     }
 
     @Kontrol(path = "/tags", method = MethodType.POST)
