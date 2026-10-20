@@ -160,7 +160,7 @@ public class PublicKeyDB {
     public static boolean isKeyDisabled(Connection con, String fingerprint) throws SQLException {
         boolean isDisabled = false;
 
-        try (PreparedStatement stmt = con.prepareStatement("select * from  public_keys where fingerprint like ? and enabled=false")) {
+        try (PreparedStatement stmt = con.prepareStatement("select * from  public_keys where fingerprint=? and enabled=false")) {
             stmt.setString(1, fingerprint);
             try (ResultSet rs = stmt.executeQuery()) {
 
@@ -568,7 +568,7 @@ public class PublicKeyDB {
     public static boolean isKeyRegistered(Connection con, Long userId, PublicKey publicKey) throws SQLException {
         boolean isDuplicate = false;
 
-        try (PreparedStatement stmt = con.prepareStatement("select * from public_keys where user_id=? and fingerprint like ? and profile_id = ? and id <> ?")) {
+        try (PreparedStatement stmt = con.prepareStatement("select * from public_keys where user_id=? and fingerprint=? and profile_id = ? and id <> ?")) {
             stmt.setLong(1, userId);
             stmt.setString(2, SSHUtil.getFingerprint(publicKey.getPublicKey()));
             if (publicKey.getProfile() != null && publicKey.getProfile().getId() != null) {

@@ -150,7 +150,7 @@ public class UserProfileDB {
             if (StringUtils.isNotEmpty(profileNm)) {
 
                 Long profileId = null;
-                try (PreparedStatement stmt = con.prepareStatement("select id from  profiles p where lower(p.nm) like ?")) {
+                try (PreparedStatement stmt = con.prepareStatement("select id from  profiles p where lower(p.nm) = ?")) {
                     stmt.setString(1, profileNm.toLowerCase());
                     try (ResultSet rs = stmt.executeQuery()) {
                         while (rs.next()) {
@@ -194,7 +194,7 @@ public class UserProfileDB {
         if (StringUtils.isNotEmpty(profileNm)) {
 
             Long profileId = null;
-            try (PreparedStatement stmt = con.prepareStatement("select id from  profiles p where lower(p.nm) like ?")) {
+            try (PreparedStatement stmt = con.prepareStatement("select id from  profiles p where lower(p.nm) = ?")) {
                 stmt.setString(1, profileNm.toLowerCase());
                 try (ResultSet rs = stmt.executeQuery()) {
                     while (rs.next()) {

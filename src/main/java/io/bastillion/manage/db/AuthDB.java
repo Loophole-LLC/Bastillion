@@ -175,13 +175,13 @@ public class AuthDB {
     public static boolean updatePassword(Connection con, Auth auth) throws SQLException, GeneralSecurityException {
         boolean success = false;
 
-        try (PreparedStatement stmt = con.prepareStatement("select * from users where auth_token like ?")) {
+        try (PreparedStatement stmt = con.prepareStatement("select * from users where auth_token=?")) {
             stmt.setString(1, auth.getAuthToken());
             try (ResultSet rs = stmt.executeQuery()) {
                 if (rs.next() && EncryptionUtil.verifyHash(auth.getPrevPassword(), rs.getString("salt"), rs.getString("password"))) {
 
                     String salt = EncryptionUtil.generateSalt();
-                    try (PreparedStatement updateStmt = con.prepareStatement("update users set password=?, salt=? where auth_token like ?")) {
+                    try (PreparedStatement updateStmt = con.prepareStatement("update users set password=?, salt=? where auth_token=?")) {
                         updateStmt.setString(1, EncryptionUtil.hashV2(auth.getPassword(), salt));
                         updateStmt.setString(2, salt);
                         updateStmt.setString(3, auth.getAuthToken());
@@ -205,7 +205,7 @@ public class AuthDB {
     public static User getUserByAuthToken(Connection con, String authToken) throws SQLException {
 
         User user = null;
-        try (PreparedStatement stmt = con.prepareStatement("select * from users where auth_token like ?")) {
+        try (PreparedStatement stmt = con.prepareStatement("select * from users where auth_token=?")) {
             stmt.setString(1, authToken);
             try (ResultSet rs = stmt.executeQuery()) {
                 if (rs.next()) {
@@ -255,7 +255,7 @@ public class AuthDB {
     public static String getSharedSecret(Connection con, Long userId) throws SQLException, GeneralSecurityException {
 
         String sharedSecret = null;
-        try (PreparedStatement stmt = con.prepareStatement("select * from users where id like ?")) {
+        try (PreparedStatement stmt = con.prepareStatement("select * from users where id=?")) {
             stmt.setLong(1, userId);
             try (ResultSet rs = stmt.executeQuery()) {
                 if (rs.next()) {
