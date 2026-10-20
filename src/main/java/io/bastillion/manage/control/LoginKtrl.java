@@ -13,6 +13,7 @@ import io.bastillion.common.util.AuthUtil;
 import io.bastillion.common.util.LoginThrottleUtil;
 import io.bastillion.manage.db.AuthDB;
 import io.bastillion.manage.model.Auth;
+import io.bastillion.manage.util.ExternalAuthException;
 import io.bastillion.manage.util.SamlAuthUtil;
 import loophole.mvc.annotation.Kontrol;
 import loophole.mvc.annotation.MethodType;
@@ -44,6 +45,8 @@ public class LoginKtrl extends BaseKontroller {
     private final String AUTH_ERROR_NO_PROFILE = "Authentication Failed : There are no profiles assigned to this account";
     private final String AUTH_ERROR_EXPIRED_ACCOUNT = "Authentication Failed : Account has expired";
     private final String SSO_ERROR = "Authentication Failed : Single sign-on login was not successful";
+    private final String AUTH_ERROR_UNAVAILABLE = "Authentication Failed : The directory could not be reached. Please try again later or contact an administrator";
+    private final String SSO_ERROR_UNAVAILABLE = "Authentication Failed : Single sign-on is unavailable. Please try again later or contact an administrator";
     // Initialized rather than left null: BaseKontroller only default-constructs a model
     // object when a request parameter names it, so POSTing /loginSubmit.ktrl with no auth.*
     // parameters at all left this null and the NPE in validateLoginSubmit surfaced as an
@@ -65,6 +68,7 @@ public class LoginKtrl extends BaseKontroller {
             switch (ssoError) {
                 case "noprofile" -> addError(AUTH_ERROR_NO_PROFILE);
                 case "expired" -> addError(AUTH_ERROR_EXPIRED_ACCOUNT);
+                case "unavailable" -> addError(SSO_ERROR_UNAVAILABLE);
                 default -> addError(SSO_ERROR);
             }
         }
@@ -153,6 +157,12 @@ public class LoginKtrl extends BaseKontroller {
                 addError(AUTH_ERROR);
                 retVal = "/login.html";
             }
+        } catch (ExternalAuthException ex) {
+            //already logged as an error by ExternalAuthUtil; not counted against the client's
+            //throttle, since nothing about the credentials was checked
+            auditLogin(clientIP, AUTH_ERROR_UNAVAILABLE);
+            addError(AUTH_ERROR_UNAVAILABLE);
+            retVal = "/login.html";
         } catch (SQLException | GeneralSecurityException ex) {
             log.error(ex.toString(), ex);
             throw new ServletException(ex.toString(), ex);

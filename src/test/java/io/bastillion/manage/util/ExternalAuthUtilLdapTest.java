@@ -23,6 +23,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Runs the LDAP login path against a real in-memory directory, configured the way the
@@ -159,6 +160,67 @@ class ExternalAuthUtilLdapTest {
         assertEquals("Doe", login.user.getLastNm());
         assertNull(login.assignedRoles);
         assertNull(login.allRoles);
+    }
+
+    // --- rejected credentials vs a directory that could not be asked ---
+    // Both used to come back as "invalid credentials", which is how LDAP login stayed broken
+    // unnoticed. Each module reports them differently, so each case is pinned down here.
+
+    private static int closedPort() throws java.io.IOException {
+        try (java.net.ServerSocket socket = new java.net.ServerSocket(0)) {
+            return socket.getLocalPort();
+        }
+    }
+
+    @Test
+    void jettyModuleWrongPasswordIsARejectionNotAnOutage() {
+        for (String forceBindingLogin : List.of("false", "true")) {
+            Configuration config = configuration("org.eclipse.jetty.security.jaas.spi.LdapLoginModule", jettyOptions(forceBindingLogin));
+
+            //a LoginException, which login() treats as wrong credentials - not ExternalAuthException
+            assertThrows(LoginException.class,
+                    () -> ExternalAuthUtil.authenticate(credentials("jdoe", "wrong"), config, MODULE));
+        }
+    }
+
+    @Test
+    void jettyModuleUnreachableDirectoryIsAnOutage() throws Exception {
+        Map<String, String> options = jettyOptions("false");
+        options.put("port", String.valueOf(closedPort()));
+        Configuration config = configuration("org.eclipse.jetty.security.jaas.spi.LdapLoginModule", options);
+
+        assertThrows(ExternalAuthException.class,
+                () -> ExternalAuthUtil.authenticate(credentials("jdoe", "secret"), config, MODULE));
+    }
+
+    @Test
+    void jdkModuleUnreachableDirectoryIsAnOutage() throws Exception {
+        Map<String, String> options = new HashMap<>();
+        options.put("userProvider", "ldap://localhost:" + closedPort() + "/ou=users," + BASE);
+        options.put("authIdentity", "uid={USERNAME},ou=users," + BASE);
+        options.put("useSSL", "false");
+        Configuration config = configuration("com.sun.security.auth.module.LdapLoginModule", options);
+
+        assertThrows(ExternalAuthException.class,
+                () -> ExternalAuthUtil.authenticate(credentials("jdoe", "secret"), config, MODULE));
+    }
+
+    @Test
+    void missingLoginModuleClassIsAnOutage() {
+        Configuration config = configuration("org.example.NoSuchLoginModule", jettyOptions("false"));
+
+        ExternalAuthException ex = assertThrows(ExternalAuthException.class,
+                () -> ExternalAuthUtil.authenticate(credentials("jdoe", "secret"), config, MODULE));
+        assertTrue(ex.getMessage().contains("org.example.NoSuchLoginModule"));
+    }
+
+    @Test
+    void unknownJaasEntryIsAnOutage() {
+        Configuration config = configuration("org.eclipse.jetty.security.jaas.spi.LdapLoginModule", jettyOptions("false"));
+
+        ExternalAuthException ex = assertThrows(ExternalAuthException.class,
+                () -> ExternalAuthUtil.authenticate(credentials("jdoe", "secret"), config, "no-such-entry"));
+        assertTrue(ex.getMessage().contains("no-such-entry"));
     }
 
     @Test

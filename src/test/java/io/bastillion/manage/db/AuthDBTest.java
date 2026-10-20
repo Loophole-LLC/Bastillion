@@ -5,16 +5,25 @@
  */
 package io.bastillion.manage.db;
 
+import io.bastillion.manage.model.Auth;
 import io.bastillion.manage.model.User;
+import io.bastillion.manage.util.DBUtils;
+import io.bastillion.manage.util.EncryptionUtil;
+import io.bastillion.manage.util.ExternalAuthException;
+import io.bastillion.manage.util.ExternalAuthUtil;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mockStatic;
 
 /**
  * getUserByUID maps a SAML NameID or LDAP login name onto a local account, and the caller
@@ -70,6 +79,47 @@ class AuthDBTest {
             insertUser(con, "Admin", "A");
 
             assertThrows(SQLException.class, () -> AuthDB.getUserByUID(con, "admin"));
+        }
+    }
+
+    // --- login() when the directory cannot be asked ---
+
+    private Auth credentials(String username, String password) {
+        Auth auth = new Auth();
+        auth.setUsername(username);
+        auth.setPassword(password);
+        return auth;
+    }
+
+    @Test
+    void directoryOutageStillLetsALocalAccountIn() throws Exception {
+        Connection con = DbTestSupport.newConnection();
+        String salt = EncryptionUtil.generateSalt();
+        try (PreparedStatement stmt = con.prepareStatement("insert into users(username, password, salt, user_type) values ('breakglass', ?, ?, 'M')")) {
+            stmt.setString(1, EncryptionUtil.hashV2("local-pw", salt));
+            stmt.setString(2, salt);
+            stmt.execute();
+        }
+
+        try (MockedStatic<ExternalAuthUtil> external = mockStatic(ExternalAuthUtil.class);
+             MockedStatic<DBUtils> dbUtils = mockStatic(DBUtils.class)) {
+            external.when(() -> ExternalAuthUtil.login(any())).thenThrow(new ExternalAuthException("could not connect to the directory"));
+            dbUtils.when(DBUtils::getConn).thenReturn(con);
+
+            assertNotNull(AuthDB.login(credentials("breakglass", "local-pw")));
+        }
+    }
+
+    @Test
+    void directoryOutageIsReportedWhenNoLocalAccountMatches() throws Exception {
+        Connection con = DbTestSupport.newConnection();
+
+        try (MockedStatic<ExternalAuthUtil> external = mockStatic(ExternalAuthUtil.class);
+             MockedStatic<DBUtils> dbUtils = mockStatic(DBUtils.class)) {
+            external.when(() -> ExternalAuthUtil.login(any())).thenThrow(new ExternalAuthException("could not connect to the directory"));
+            dbUtils.when(DBUtils::getConn).thenReturn(con);
+
+            assertThrows(ExternalAuthException.class, () -> AuthDB.login(credentials("jdoe", "directory-pw")));
         }
     }
 }

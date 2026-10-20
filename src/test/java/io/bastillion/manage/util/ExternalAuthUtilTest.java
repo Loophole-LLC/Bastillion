@@ -102,7 +102,7 @@ class ExternalAuthUtilTest {
     }
 
     @Test
-    void loginIsANoOpForAnyInputWhenLdapIsNotConfigured() {
+    void loginIsANoOpForAnyInputWhenLdapIsNotConfigured() throws Exception {
         assertNull(ExternalAuthUtil.login(null));
 
         Auth blank = new Auth();

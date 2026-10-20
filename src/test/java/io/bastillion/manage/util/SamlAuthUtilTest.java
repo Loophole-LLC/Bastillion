@@ -33,7 +33,7 @@ class SamlAuthUtilTest {
     private HttpServletRequest request;
 
     @Test
-    void loginIsANoOpForAnyInputWhenSamlIsNotConfigured() {
+    void loginIsANoOpForAnyInputWhenSamlIsNotConfigured() throws Exception {
         assertNull(SamlAuthUtil.login(null));
         assertNull(SamlAuthUtil.login(request));
 

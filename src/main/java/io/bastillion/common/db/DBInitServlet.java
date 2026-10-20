@@ -14,6 +14,7 @@ import io.bastillion.manage.model.Auth;
 import io.bastillion.manage.model.CertAuthority;
 import io.bastillion.manage.util.DBUtils;
 import io.bastillion.manage.util.EncryptionUtil;
+import io.bastillion.manage.util.ExternalAuthUtil;
 import io.bastillion.manage.util.RefreshAuthKeyUtil;
 import io.bastillion.manage.util.KeyManagement;
 import io.bastillion.manage.util.SSHUtil;
@@ -227,6 +228,17 @@ public class DBInitServlet extends jakarta.servlet.http.HttpServlet {
             if (validityWarning != null) {
                 System.out.println("WARNING: " + validityWarning);
                 log.error(validityWarning);
+            }
+
+            // An LDAP setup that cannot work - jaasModule naming no jaas.conf entry, or an entry
+            // naming a login module class that is not there - otherwise only shows up as
+            // every directory user being told they have the wrong password.
+            String ldapProblem = ExternalAuthUtil.configurationProblem();
+            if (ldapProblem != null) {
+                String warning = "WARNING: LDAP login will fail: " + ldapProblem
+                        + ". Until this is fixed only local accounts can sign in.";
+                System.out.println(warning);
+                log.error(warning);
             }
 
             //delete ssh keys

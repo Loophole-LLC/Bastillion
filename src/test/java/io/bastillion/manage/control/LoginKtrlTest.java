@@ -10,6 +10,7 @@ import io.bastillion.common.util.LoginThrottleUtil;
 import io.bastillion.manage.db.AuthDB;
 import io.bastillion.manage.model.Auth;
 import io.bastillion.manage.model.User;
+import io.bastillion.manage.util.ExternalAuthException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
@@ -27,6 +28,7 @@ import java.util.Collections;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.contains;
@@ -125,6 +127,33 @@ class LoginKtrlTest {
             assertTrue(ktrl.getErrors().contains(
                     "Authentication Failed : Too many failed login attempts. Please try again later."));
             authDB.verify(() -> AuthDB.login(any()), never());
+        }
+    }
+
+    @Test
+    void directoryOutageSaysUnavailableAndDoesNotCountAgainstTheThrottle() throws Exception {
+        String ip = freshIp();
+        when(request.getRemoteAddr()).thenReturn(ip);
+
+        try (MockedStatic<AuthDB> authDB = mockStatic(AuthDB.class)) {
+            authDB.when(() -> AuthDB.login(any())).thenThrow(new ExternalAuthException("could not connect to the directory"));
+
+            //more attempts than the throttle allows failures
+            for (int i = 0; i < 12; i++) {
+                LoginKtrl ktrl = newController();
+                Auth auth = new Auth();
+                auth.setUsername("alice");
+                auth.setPassword("correct");
+                setAuth(ktrl, auth);
+
+                String view = ktrl.loginSubmit();
+
+                assertEquals("/login.html", view);
+                assertTrue(ktrl.getErrors().contains(
+                        "Authentication Failed : The directory could not be reached. Please try again later or contact an administrator"));
+                verify(session, never()).setAttribute(eq(AuthUtil.AUTH_TOKEN), any());
+            }
+            assertFalse(LoginThrottleUtil.isBlocked(ip));
         }
     }
 

@@ -6,6 +6,8 @@
 package io.bastillion.manage.util;
 
 import com.onelogin.saml2.authn.SamlResponse;
+import com.onelogin.saml2.exception.SettingsException;
+import com.onelogin.saml2.exception.ValidationError;
 import com.onelogin.saml2.http.HttpRequest;
 import com.onelogin.saml2.settings.Saml2Settings;
 import io.bastillion.common.saml.SamlSettingsUtil;
@@ -17,8 +19,14 @@ import io.bastillion.manage.model.User;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.xml.sax.SAXException;
 
 import jakarta.servlet.http.HttpServletRequest;
+
+import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.xpath.XPathExpressionException;
+import java.io.IOException;
+import java.security.GeneralSecurityException;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -54,42 +62,60 @@ public class SamlAuthUtil {
      * Validates the SAML Response POSTed to the ACS endpoint and, on success, provisions or
      * updates the matching User row.
      *
-     * @return auth token if the assertion is valid, null otherwise
+     * @return auth token if the assertion is valid, null if it is not or SAML is off
+     * @throws ExternalAuthException if SAML is misconfigured or the IdP settings cannot be loaded
      */
-    public static String login(HttpServletRequest servletRequest) {
+    public static String login(HttpServletRequest servletRequest)
+            throws ExternalAuthException, SQLException, GeneralSecurityException {
         if (!samlAuthEnabled) {
             return null;
         }
 
-        Connection con = null;
-        String authToken = null;
+        Saml2Settings settings;
         try {
-            Saml2Settings settings = SamlSettingsUtil.getSettings();
-            HttpRequest samlHttpRequest = new HttpRequest(servletRequest.getRequestURL().toString(),
-                    toParameterMap(servletRequest));
+            settings = SamlSettingsUtil.getSettings();
+        } catch (Exception ex) {
+            throw new ExternalAuthException("SAML settings could not be loaded", ex);
+        }
 
-            //no requestId argument - isValid() (not isValid(requestId)) deliberately, so
-            //both SP-initiated and IdP-initiated (e.g. clicked from the IdP's app portal)
-            //logins validate cleanly; there is no Bastillion-issued request to correlate
-            //against for the latter, and no pre-redirect session state survives the
-            //cross-origin POST anyway (see SamlAcsServlet).
-            SamlResponse samlResponse = new SamlResponse(settings, samlHttpRequest);
-            if (!samlResponse.isValid()) {
-                log.debug("SAML response invalid: " + samlResponse.getError());
-                return null;
-            }
+        //no requestId argument - isValid() (not isValid(requestId)) deliberately, so
+        //both SP-initiated and IdP-initiated (e.g. clicked from the IdP's app portal)
+        //logins validate cleanly; there is no Bastillion-issued request to correlate
+        //against for the latter, and no pre-redirect session state survives the
+        //cross-origin POST anyway (see SamlAcsServlet).
+        SamlResponse samlResponse;
+        try {
+            samlResponse = new SamlResponse(settings, new HttpRequest(servletRequest.getRequestURL().toString(),
+                    toParameterMap(servletRequest)));
+        } catch (SettingsException | ParserConfigurationException ex) {
+            throw new ExternalAuthException("SAML is misconfigured", ex);
+        } catch (XPathExpressionException | SAXException | IOException | ValidationError ex) {
+            //what was POSTed is not a SAML response we can read - a bad request, not an outage
+            log.debug("SAML response unreadable: " + ex);
+            return null;
+        }
+        if (!samlResponse.isValid()) {
+            log.debug("SAML response invalid: " + samlResponse.getError());
+            return null;
+        }
 
-            String username = samlResponse.getNameId();
-            if (StringUtils.isEmpty(username)) {
-                return null;
-            }
+        String username;
+        List<String> assignedRoles;
+        try {
+            username = samlResponse.getNameId();
+            assignedRoles = samlResponse.getAttributes().getOrDefault(ROLE_ATTRIBUTE, new ArrayList<>());
+        } catch (Exception ex) {
+            log.debug("SAML response unreadable: " + ex);
+            return null;
+        }
+        if (StringUtils.isEmpty(username)) {
+            return null;
+        }
 
-            con = DBUtils.getConn();
-
+        try (Connection con = DBUtils.getConn()) {
             //a SAML assertion only ever tells us this user's roles, so unlike LDAP (which can
             //enumerate every role the directory knows about via getAllRoles()) the names to
             //recompute membership for are every Bastillion-side profile name instead
-            List<String> assignedRoles = samlResponse.getAttributes().getOrDefault(ROLE_ATTRIBUTE, new ArrayList<>());
             List<String> allProfileNames = new ArrayList<>();
             for (Profile profile : ProfileDB.getAllProfiles(con)) {
                 allProfileNames.add(profile.getNm());
@@ -97,19 +123,8 @@ public class SamlAuthUtil {
 
             User newUser = new User();
             newUser.setUsername(username);
-            authToken = ExternalAccountUtil.link(con, newUser, Auth.AUTH_SAML, allProfileNames, assignedRoles, DEFAULT_SAML_PROFILE);
-
-        } catch (Exception ex) {
-            authToken = null;
-            log.error(ex.toString(), ex);
-        } finally {
-            try {
-                DBUtils.closeConn(con);
-            } catch (SQLException ex) {
-                log.error(ex.toString(), ex);
-            }
+            return ExternalAccountUtil.link(con, newUser, Auth.AUTH_SAML, allProfileNames, assignedRoles, DEFAULT_SAML_PROFILE);
         }
-        return authToken;
     }
 
     private static Map<String, List<String>> toParameterMap(HttpServletRequest request) {

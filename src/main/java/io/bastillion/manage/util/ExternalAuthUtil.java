@@ -16,8 +16,10 @@ import org.eclipse.jetty.security.jaas.spi.LdapLoginModule;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.naming.CommunicationException;
 import javax.naming.NamingEnumeration;
 import javax.naming.NamingException;
+import javax.naming.ServiceUnavailableException;
 import javax.naming.directory.Attribute;
 import javax.naming.directory.Attributes;
 import javax.naming.directory.DirContext;
@@ -33,6 +35,7 @@ import javax.security.auth.login.AppConfigurationEntry;
 import javax.security.auth.login.Configuration;
 import javax.security.auth.login.LoginContext;
 import javax.security.auth.login.LoginException;
+import java.security.GeneralSecurityException;
 import java.security.Principal;
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -87,40 +90,76 @@ public class ExternalAuthUtil {
     /**
      * external auth login method
      *
-     * @return auth token if success
+     * @return auth token if success, null if the directory rejected the credentials or
+     * external auth is off
+     * @throws ExternalAuthException if the directory could not be asked
      * @auth authentication credentials
      */
-    public static String login(final Auth auth) {
-        Connection con = null;
-        String authToken = null;
+    public static String login(final Auth auth) throws ExternalAuthException, SQLException, GeneralSecurityException {
 
-        if (externalAuthEnabled && auth != null && StringUtils.isNotEmpty(auth.getUsername()) && StringUtils.isNotEmpty(auth.getPassword())) {
+        if (!externalAuthEnabled || auth == null || StringUtils.isEmpty(auth.getUsername()) || StringUtils.isEmpty(auth.getPassword())) {
+            return null;
+        }
 
+        DirectoryLogin directoryLogin;
+        try {
+            directoryLogin = authenticate(auth, jaasConfiguration(), JAAS_MODULE);
+        } catch (LoginException le) {
+            log.debug(le.toString(), le);
+            return null;
+        } catch (ExternalAuthException ex) {
+            log.error("LDAP login unavailable: " + ex.getMessage(), ex);
+            throw ex;
+        }
+
+        try (Connection con = DBUtils.getConn()) {
+            return ExternalAccountUtil.link(con, directoryLogin.user, Auth.AUTH_EXTERNAL,
+                    directoryLogin.allRoles, directoryLogin.assignedRoles, DEFAULT_LDAP_PROFILE);
+        }
+    }
+
+    /**
+     * Why LDAP login cannot work with the current jaas.conf, for a startup warning - the
+     * jaasModule entry missing, or a login module class that does not load.
+     *
+     * @return the problem, or null if there is none or external auth is off
+     */
+    public static String configurationProblem() {
+        if (!externalAuthEnabled) {
+            return null;
+        }
+        try {
+            checkConfiguration(withCurrentJettyNames(jaasConfiguration()), JAAS_MODULE);
+            return null;
+        } catch (ExternalAuthException ex) {
+            return ex.getMessage();
+        }
+    }
+
+    private static Configuration jaasConfiguration() throws ExternalAuthException {
+        try {
+            return Configuration.getConfiguration();
+        } catch (SecurityException ex) {
+            throw new ExternalAuthException("could not read " + AppConfig.CONFIG_DIR + "/" + JAAS_CONF, ex);
+        }
+    }
+
+    private static AppConfigurationEntry[] checkConfiguration(Configuration configuration, String jaasModule) throws ExternalAuthException {
+        AppConfigurationEntry[] entries = configuration.getAppConfigurationEntry(jaasModule);
+        if (entries == null || entries.length == 0) {
+            throw new ExternalAuthException("jaasModule=" + jaasModule + " but " + JAAS_CONF + " has no entry by that name");
+        }
+        ClassLoader classLoader = Thread.currentThread().getContextClassLoader() != null
+                ? Thread.currentThread().getContextClassLoader() : ExternalAuthUtil.class.getClassLoader();
+        for (AppConfigurationEntry entry : entries) {
             try {
-                DirectoryLogin directoryLogin = authenticate(auth, Configuration.getConfiguration(), JAAS_MODULE);
-
-                con = DBUtils.getConn();
-                authToken = ExternalAccountUtil.link(con, directoryLogin.user, Auth.AUTH_EXTERNAL,
-                        directoryLogin.allRoles, directoryLogin.assignedRoles, DEFAULT_LDAP_PROFILE);
-            } catch (LoginException le) {
-                authToken = null;
-                log.debug(le.toString(), le);
-            } catch (Exception ex) {
-                authToken = null;
-                log.error(ex.toString(), ex);
-            } finally {
-                // con is opened partway through the try block above (after LDAP/JAAS login
-                // succeeds) - closing it here rather than only on the success path ensures a
-                // failure partway through (e.g. a DB error while provisioning the user record)
-                // doesn't leak the pooled connection.
-                try {
-                    DBUtils.closeConn(con);
-                } catch (SQLException ex) {
-                    log.error(ex.toString(), ex);
-                }
+                Class.forName(entry.getLoginModuleName(), false, classLoader);
+            } catch (ClassNotFoundException ex) {
+                throw new ExternalAuthException(JAAS_CONF + " entry " + jaasModule + " names login module "
+                        + entry.getLoginModuleName() + ", which does not exist", ex);
             }
         }
-        return authToken;
+        return entries;
     }
 
     /**
@@ -131,10 +170,13 @@ public class ExternalAuthUtil {
      * @param configuration JAAS configuration holding jaasModule
      * @param jaasModule    entry name in that configuration
      * @return what the login says about the user
-     * @throws LoginException if the directory rejects the credentials
+     * @throws LoginException        if the directory rejected the credentials
+     * @throws ExternalAuthException if the directory could not be asked
      */
-    static DirectoryLogin authenticate(final Auth auth, Configuration configuration, String jaasModule) throws Exception {
+    static DirectoryLogin authenticate(final Auth auth, Configuration configuration, String jaasModule)
+            throws LoginException, ExternalAuthException {
         configuration = withCurrentJettyNames(configuration);
+        AppConfigurationEntry[] entries = checkConfiguration(configuration, jaasModule);
 
         CallbackHandler callbackHandler = callbacks -> {
             for (Callback callback : callbacks) {
@@ -148,68 +190,114 @@ public class ExternalAuthUtil {
             }
         };
 
-        LoginContext loginContext = new LoginContext(jaasModule, new Subject(), callbackHandler, configuration);
-        //will throw exception if login fail
-        loginContext.login();
+        //connected before the login rather than after: an unreachable directory fails here,
+        //whereas inside LoginContext it comes back as the same bare LoginException as a
+        //wrong password
+        Map<AppConfigurationEntry, LdapLoginModule> ldapModules = new HashMap<>();
+        try {
+            for (AppConfigurationEntry entry : entries) {
+                if (LdapLoginModule.class.getName().equals(entry.getLoginModuleName())) {
+                    LdapLoginModule loginModule = new LdapLoginModule();
+                    try {
+                        loginModule.initialize(new Subject(), callbackHandler, new HashMap<>(), entry.getOptions());
+                    } catch (IllegalStateException ex) {
+                        throw new ExternalAuthException("could not connect to the directory", ex);
+                    }
+                    ldapModules.put(entry, loginModule);
+                }
+            }
 
-        DirectoryLogin directoryLogin = new DirectoryLogin();
-        directoryLogin.user.setUsername(auth.getUsername());
-        if (auth.getUsername().contains("@")) {
-            directoryLogin.user.setEmail(auth.getUsername());
-        }
+            LoginContext loginContext = new LoginContext(jaasModule, new Subject(), callbackHandler, configuration);
+            try {
+                //will throw exception if login fail
+                loginContext.login();
+            } catch (LoginException ex) {
+                if (isDirectoryUnreachable(ex)) {
+                    throw new ExternalAuthException("could not connect to the directory", ex);
+                }
+                throw ex;
+            }
 
-        for (AppConfigurationEntry entry : configuration.getAppConfigurationEntry(jaasModule)) {
-            if (LdapLoginModule.class.getName().equals(entry.getLoginModuleName())) {
-                readLdapUser(directoryLogin, auth.getUsername(), callbackHandler, entry.getOptions());
-            } else {
-                //if it looks like name is returned default it
-                for (Principal p : loginContext.getSubject().getPrincipals()) {
-                    if (p.getName().contains(" ")) {
-                        String[] name = p.getName().split(" ");
-                        if (name.length > 1) {
-                            directoryLogin.user.setFirstNm(name[0]);
-                            directoryLogin.user.setLastNm(name[name.length - 1]);
+            DirectoryLogin directoryLogin = new DirectoryLogin();
+            directoryLogin.user.setUsername(auth.getUsername());
+            if (auth.getUsername().contains("@")) {
+                directoryLogin.user.setEmail(auth.getUsername());
+            }
+
+            for (AppConfigurationEntry entry : entries) {
+                LdapLoginModule loginModule = ldapModules.get(entry);
+                if (loginModule != null) {
+                    try {
+                        readLdapUser(directoryLogin, auth.getUsername(), loginModule, entry.getOptions());
+                    } catch (Exception ex) {
+                        throw new ExternalAuthException("could not read the user's entry from the directory", ex);
+                    }
+                } else {
+                    //if it looks like name is returned default it
+                    for (Principal p : loginContext.getSubject().getPrincipals()) {
+                        if (p.getName().contains(" ")) {
+                            String[] name = p.getName().split(" ");
+                            if (name.length > 1) {
+                                directoryLogin.user.setFirstNm(name[0]);
+                                directoryLogin.user.setLastNm(name[name.length - 1]);
+                            }
                         }
                     }
                 }
             }
+            return directoryLogin;
+        } finally {
+            //closes each module's own directory connection
+            for (LdapLoginModule loginModule : ldapModules.values()) {
+                try {
+                    loginModule.abort();
+                } catch (LoginException ex) {
+                    log.debug(ex.toString(), ex);
+                }
+            }
         }
-        return directoryLogin;
+    }
+
+    /**
+     * true if a failed login was the directory not answering rather than refusing - the JDK's
+     * LdapLoginModule reports both as FailedLoginException, with the connection failure as
+     * the cause
+     */
+    private static boolean isDirectoryUnreachable(Throwable ex) {
+        for (Throwable t = ex; t != null; t = t.getCause()) {
+            if (t instanceof CommunicationException || t instanceof ServiceUnavailableException) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
      * reads the user's roles, every role the directory knows about, and the user's name and
      * email, using the same connection settings and defaults as the LdapLoginModule entry
      */
-    private static void readLdapUser(DirectoryLogin directoryLogin, String username, CallbackHandler callbackHandler,
+    private static void readLdapUser(DirectoryLogin directoryLogin, String username, LdapLoginModule loginModule,
                                      Map<String, ?> options) throws Exception {
 
-        LdapLoginModule loginModule = new LdapLoginModule();
-        loginModule.initialize(new Subject(), callbackHandler, new HashMap<>(), options);
+        AbstractLoginModule.JAASUser userInfo = loginModule.getUser(username);
+        if (userInfo != null) {
+            directoryLogin.assignedRoles = userInfo.doFetchRoles();
+        }
+
+        DirContext dirContext = new InitialDirContext(loginModule.getEnvironment());
         try {
-            AbstractLoginModule.JAASUser userInfo = loginModule.getUser(username);
-            if (userInfo != null) {
-                directoryLogin.assignedRoles = userInfo.doFetchRoles();
-            }
+            directoryLogin.allRoles = getAllRoles(dirContext, option(options, "roleBaseDn", null),
+                    option(options, "roleNameAttribute", "roleName"),
+                    option(options, "roleObjectClass", "groupOfUniqueNames"));
 
-            DirContext dirContext = new InitialDirContext(loginModule.getEnvironment());
-            try {
-                directoryLogin.allRoles = getAllRoles(dirContext, option(options, "roleBaseDn", null),
-                        option(options, "roleNameAttribute", "roleName"),
-                        option(options, "roleObjectClass", "groupOfUniqueNames"));
-
-                Attributes userAttributes = getUserAttributes(dirContext, username, option(options, "userBaseDn", null),
-                        option(options, "userObjectClass", "inetOrgPerson"),
-                        option(options, "userIdAttribute", "cn"));
-                if (userAttributes != null) {
-                    setNameAndEmail(directoryLogin.user, userAttributes);
-                }
-            } finally {
-                dirContext.close();
+            Attributes userAttributes = getUserAttributes(dirContext, username, option(options, "userBaseDn", null),
+                    option(options, "userObjectClass", "inetOrgPerson"),
+                    option(options, "userIdAttribute", "cn"));
+            if (userAttributes != null) {
+                setNameAndEmail(directoryLogin.user, userAttributes);
             }
         } finally {
-            //closes the module's own directory connection
-            loginModule.abort();
+            dirContext.close();
         }
     }
 

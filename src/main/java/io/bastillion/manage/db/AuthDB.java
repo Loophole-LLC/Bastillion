@@ -10,6 +10,7 @@ import io.bastillion.manage.model.Auth;
 import io.bastillion.manage.model.User;
 import io.bastillion.manage.util.DBUtils;
 import io.bastillion.manage.util.EncryptionUtil;
+import io.bastillion.manage.util.ExternalAuthException;
 import io.bastillion.manage.util.ExternalAuthUtil;
 import org.apache.commons.lang3.StringUtils;
 
@@ -38,10 +39,19 @@ public class AuthDB {
      *
      * @param auth username and password object
      * @return auth token if success
+     * @throws ExternalAuthException if the directory could not be asked and no local account
+     *                               matched either
      */
-    public static String login(Auth auth) throws SQLException, GeneralSecurityException {
-        //check ldap first
-        String authToken = ExternalAuthUtil.login(auth);
+    public static String login(Auth auth) throws SQLException, GeneralSecurityException, ExternalAuthException {
+        //check ldap first - if the directory is down, a local account (a break-glass admin)
+        //can still sign in, and only then is the outage reported
+        String authToken = null;
+        ExternalAuthException externalAuthError = null;
+        try {
+            authToken = ExternalAuthUtil.login(auth);
+        } catch (ExternalAuthException ex) {
+            externalAuthError = ex;
+        }
 
         if (StringUtils.isEmpty(authToken)) {
 
@@ -64,6 +74,9 @@ public class AuthDB {
             }
         }
 
+        if (authToken == null && externalAuthError != null) {
+            throw externalAuthError;
+        }
         return authToken;
     }
 

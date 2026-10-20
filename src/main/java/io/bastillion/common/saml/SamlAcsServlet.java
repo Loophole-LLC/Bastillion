@@ -7,6 +7,7 @@ package io.bastillion.common.saml;
 
 import io.bastillion.common.util.AuditLogUtil;
 import io.bastillion.common.util.AuthSessionUtil;
+import io.bastillion.manage.util.ExternalAuthException;
 import io.bastillion.manage.util.SamlAuthUtil;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
@@ -87,8 +88,10 @@ public class SamlAcsServlet extends HttpServlet {
             } else {
                 loginAuditLogger.info("SAML - Authentication Failed : Invalid assertion");
             }
-        } catch (SQLException | GeneralSecurityException ex) {
-            log.error(ex.toString(), ex);
+        } catch (ExternalAuthException | SQLException | GeneralSecurityException ex) {
+            log.error("SAML login unavailable: " + ex.getMessage(), ex);
+            loginAuditLogger.info("SAML - Authentication Unavailable");
+            redirectTo = "/login.ktrl?ssoError=unavailable";
         }
         response.sendRedirect(request.getContextPath() + redirectTo);
     }

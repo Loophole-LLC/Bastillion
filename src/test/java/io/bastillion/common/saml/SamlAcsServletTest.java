@@ -7,6 +7,7 @@ package io.bastillion.common.saml;
 
 import io.bastillion.common.util.AuthSessionUtil;
 import io.bastillion.manage.model.User;
+import io.bastillion.manage.util.ExternalAuthException;
 import io.bastillion.manage.util.SamlAuthUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -56,6 +57,19 @@ class SamlAcsServletTest {
             servlet.doPost(request, response);
 
             verify(response).sendRedirect("/login.ktrl?ssoError=invalid");
+        }
+    }
+
+    @Test
+    void unloadableSamlSettingsRedirectsWithUnavailableSsoError() throws Exception {
+        stubContextPath();
+        try (MockedStatic<SamlAuthUtil> samlAuthUtil = mockStatic(SamlAuthUtil.class)) {
+            samlAuthUtil.when(() -> SamlAuthUtil.login(request))
+                    .thenThrow(new ExternalAuthException("SAML settings could not be loaded"));
+
+            servlet.doPost(request, response);
+
+            verify(response).sendRedirect("/login.ktrl?ssoError=unavailable");
         }
     }
 
