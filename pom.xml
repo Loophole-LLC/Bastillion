@@ -123,6 +123,13 @@
             <version>5.24.0</version>
             <scope>test</scope>
         </dependency>
+        <!-- in-memory LDAP server for exercising the LDAP login path end to end -->
+        <dependency>
+            <groupId>com.unboundid</groupId>
+            <artifactId>unboundid-ldapsdk</artifactId>
+            <version>7.0.5</version>
+            <scope>test</scope>
+        </dependency>
 
         <!-- Database -->
         <dependency>
