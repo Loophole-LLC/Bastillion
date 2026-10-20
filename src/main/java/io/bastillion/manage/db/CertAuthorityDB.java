@@ -43,8 +43,18 @@ public class CertAuthorityDB {
      * @return the certificate authority keypair, or null if none has been generated
      */
     public static CertAuthority getCertAuthority(String type) throws SQLException, GeneralSecurityException {
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement(
+
+        try (Connection con = DBUtils.getConn()) {
+            return getCertAuthority(con, type);
+        }
+    }
+
+    /**
+     * @param con DB connection
+     * @return the certificate authority keypair, or null if none has been generated
+     */
+    public static CertAuthority getCertAuthority(Connection con, String type) throws SQLException, GeneralSecurityException {
+        try (PreparedStatement stmt = con.prepareStatement(
                      "select * from cert_authority where type = ?")) {
             stmt.setString(1, type);
             try (ResultSet rs = stmt.executeQuery()) {
@@ -73,7 +83,25 @@ public class CertAuthorityDB {
      */
     public static String generateIfAbsent(String type)
             throws SQLException, GeneralSecurityException, IOException {
-        if (getCertAuthority(type) != null) {
+
+        try (Connection con = DBUtils.getConn()) {
+            return generateIfAbsent(con, type);
+        }
+    }
+
+    /**
+     * Generates and stores a certificate authority keypair if none exists yet.
+     * <p>
+     * Generated up front rather than on first use, because the public half has to be installed
+     * on every managed system before certificate authentication can be switched on - an
+     * operator cannot adopt the feature without being able to see the key first.
+     *
+     * @param con DB connection
+     * @return the public key if one was generated, or null if an authority already existed
+     */
+    public static String generateIfAbsent(Connection con, String type)
+            throws SQLException, IOException, GeneralSecurityException {
+        if (getCertAuthority(con, type) != null) {
             return null;
         }
 
@@ -85,8 +113,7 @@ public class CertAuthorityDB {
                         SshCertificateUtil.ED25519_KEY_TYPE, kp.getPublic().getEncoded()))
                 + " bastillion-" + type.toLowerCase() + "-ca";
 
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement(
+        try (PreparedStatement stmt = con.prepareStatement(
                      "insert into cert_authority (type, public_key, private_key) values (?,?,?)")) {
             stmt.setString(1, type);
             stmt.setString(2, publicKey);
@@ -105,39 +132,54 @@ public class CertAuthorityDB {
      * server is embedded - see io.bastillion.Main), and the transaction covers the statements.
      */
     public static synchronized long nextSerial(String type) throws SQLException, GeneralSecurityException {
+
         try (Connection con = DBUtils.getConn()) {
-            boolean autoCommit = con.getAutoCommit();
-            con.setAutoCommit(false);
-            try {
-                try (PreparedStatement stmt = con.prepareStatement(
-                        "update cert_authority set next_serial = next_serial + 1 where type = ?")) {
-                    stmt.setString(1, type);
-                    stmt.executeUpdate();
-                }
-                try (PreparedStatement stmt = con.prepareStatement(
-                        "select next_serial from cert_authority where type = ?")) {
-                    stmt.setString(1, type);
-                    try (ResultSet rs = stmt.executeQuery()) {
-                        if (!rs.next()) {
-                            // No row of this type, so the UPDATE above matched nothing.
-                            // Returning 1 here would have issued every certificate with the
-                            // same serial - the thing sshd logs and a revocation list revokes
-                            // against - and reported it as success.
-                            con.rollback();
-                            throw new SQLException("No " + type + " certificate authority to "
-                                    + "allocate a serial from");
-                        }
-                        long serial = rs.getLong(1);
-                        con.commit();
-                        return serial;
-                    }
-                }
-            } catch (SQLException ex) {
-                con.rollback();
-                throw ex;
-            } finally {
-                con.setAutoCommit(autoCommit);
+            return nextSerial(con, type);
+        }
+    }
+
+    /**
+     * Allocates the next certificate serial.
+     * <p>
+     * sshd logs the serial next to the key id on every accepted connection, and it is what a
+     * key revocation list revokes, so each issued certificate needs its own. Read and increment
+     * have to be one atomic step: {@code synchronized} covers the single JVM this runs in (the
+     * server is embedded - see io.bastillion.Main), and the transaction covers the statements.
+     *
+     * @param con DB connection
+     */
+    public static synchronized long nextSerial(Connection con, String type) throws SQLException {
+        boolean autoCommit = con.getAutoCommit();
+        con.setAutoCommit(false);
+        try {
+            try (PreparedStatement stmt = con.prepareStatement(
+                    "update cert_authority set next_serial = next_serial + 1 where type = ?")) {
+                stmt.setString(1, type);
+                stmt.executeUpdate();
             }
+            try (PreparedStatement stmt = con.prepareStatement(
+                    "select next_serial from cert_authority where type = ?")) {
+                stmt.setString(1, type);
+                try (ResultSet rs = stmt.executeQuery()) {
+                    if (!rs.next()) {
+                        // No row of this type, so the UPDATE above matched nothing.
+                        // Returning 1 here would have issued every certificate with the
+                        // same serial - the thing sshd logs and a revocation list revokes
+                        // against - and reported it as success.
+                        con.rollback();
+                        throw new SQLException("No " + type + " certificate authority to "
+                                + "allocate a serial from");
+                    }
+                    long serial = rs.getLong(1);
+                    con.commit();
+                    return serial;
+                }
+            }
+        } catch (SQLException ex) {
+            con.rollback();
+            throw ex;
+        } finally {
+            con.setAutoCommit(autoCommit);
         }
     }
 }

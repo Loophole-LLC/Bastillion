@@ -30,10 +30,22 @@ public class PrivateKeyDB {
      */
     public static ApplicationKey getApplicationKey() throws SQLException, GeneralSecurityException {
 
+        try (Connection con = DBUtils.getConn()) {
+            return getApplicationKey(con);
+        }
+    }
+
+    /**
+     * returns public private key for application
+     *
+     * @param con DB connection
+     * @return app key values
+     */
+    public static ApplicationKey getApplicationKey(Connection con) throws SQLException, GeneralSecurityException {
+
         ApplicationKey appKey = null;
 
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement("select * from  application_key");
+        try (PreparedStatement stmt = con.prepareStatement("select * from  application_key");
              ResultSet rs = stmt.executeQuery()) {
 
             while (rs.next()) {
@@ -63,17 +75,34 @@ public class PrivateKeyDB {
             throws SQLException, GeneralSecurityException {
 
         try (Connection con = DBUtils.getConn()) {
-            try (PreparedStatement delStmt = con.prepareStatement("delete from application_key")) {
-                delStmt.execute();
-            }
+            updateApplicationKey(con, publicKey, privateKey, passphrase);
+        }
+    }
 
-            try (PreparedStatement insStmt = con.prepareStatement(
-                    "insert into application_key (public_key, private_key, passphrase) values(?,?,?)")) {
-                insStmt.setString(1, publicKey);
-                insStmt.setString(2, EncryptionUtil.encrypt(privateKey));
-                insStmt.setString(3, EncryptionUtil.encrypt(passphrase == null ? "" : passphrase));
-                insStmt.execute();
-            }
+    /**
+     * Replaces the application's SSH keypair (the one key every registered system trusts)
+     * with the given values, encrypting private_key/passphrase the same way the initial
+     * DBInitServlet-generated key is. Takes effect immediately - callers like
+     * SSHUtil.authAndAddPubKey() read this table fresh on every connection, nothing is
+     * cached, so no restart is needed. Callers must validate the keypair actually loads
+     * (see SSHUtil.validateKeyPair) before calling this - an unvalidated bad paste here
+     * would break every future SSH connection until fixed.
+     *
+     * @param con DB connection
+     */
+    public static void updateApplicationKey(Connection con, String publicKey, String privateKey, String passphrase)
+            throws SQLException, GeneralSecurityException {
+
+        try (PreparedStatement delStmt = con.prepareStatement("delete from application_key")) {
+            delStmt.execute();
+        }
+
+        try (PreparedStatement insStmt = con.prepareStatement(
+                "insert into application_key (public_key, private_key, passphrase) values(?,?,?)")) {
+            insStmt.setString(1, publicKey);
+            insStmt.setString(2, EncryptionUtil.encrypt(privateKey));
+            insStmt.setString(3, EncryptionUtil.encrypt(passphrase == null ? "" : passphrase));
+            insStmt.execute();
         }
     }
 }

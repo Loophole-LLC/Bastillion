@@ -31,10 +31,23 @@ public class UserThemeDB {
      */
     public static UserSettings getTheme(Long userId) throws SQLException, GeneralSecurityException {
 
+        try (Connection con = DBUtils.getConn()) {
+            return getTheme(con, userId);
+        }
+    }
+
+    /**
+     * get user theme
+     *
+     * @param con    DB connection
+     * @param userId object
+     * @return user theme object
+     */
+    public static UserSettings getTheme(Connection con, Long userId) throws SQLException {
+
         UserSettings theme = new UserSettings();
 
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement("select * from user_theme where user_id=?")) {
+        try (PreparedStatement stmt = con.prepareStatement("select * from user_theme where user_id=?")) {
             stmt.setLong(1, userId);
             try (ResultSet rs = stmt.executeQuery()) {
                 if (rs.next()) {
@@ -77,30 +90,41 @@ public class UserThemeDB {
     public static void saveTheme(Long userId, UserSettings theme) throws SQLException, GeneralSecurityException {
 
         try (Connection con = DBUtils.getConn()) {
-            try (PreparedStatement stmt = con.prepareStatement("delete from user_theme where user_id=?")) {
-                stmt.setLong(1, userId);
-                stmt.execute();
-            }
+            saveTheme(con, userId, theme);
+        }
+    }
 
-            if (theme != null) {
-                try (PreparedStatement stmt = con.prepareStatement("insert into user_theme(user_id, bg, fg, d1, d2, d3, d4, d5, d6, d7, d8, b1, b2, b3, b4, b5, b6, b7, b8, ui_theme) values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")) {
-                    stmt.setLong(1, userId);
-                    stmt.setString(2, theme.getBg());
-                    stmt.setString(3, theme.getFg());
-                    //if contains all 16 theme colors insert
-                    if (theme.getColors() != null && theme.getColors().length == 16) {
-                        for (int i = 0; i < 16; i++) {
-                            stmt.setString(i + 4, theme.getColors()[i]);
-                        }
-                        //else set to null
-                    } else {
-                        for (int i = 0; i < 16; i++) {
-                            stmt.setString(i + 4, null);
-                        }
+    /**
+     * saves user theme
+     *
+     * @param con    DB connection
+     * @param userId object
+     */
+    public static void saveTheme(Connection con, Long userId, UserSettings theme) throws SQLException {
+
+        try (PreparedStatement stmt = con.prepareStatement("delete from user_theme where user_id=?")) {
+            stmt.setLong(1, userId);
+            stmt.execute();
+        }
+
+        if (theme != null) {
+            try (PreparedStatement stmt = con.prepareStatement("insert into user_theme(user_id, bg, fg, d1, d2, d3, d4, d5, d6, d7, d8, b1, b2, b3, b4, b5, b6, b7, b8, ui_theme) values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")) {
+                stmt.setLong(1, userId);
+                stmt.setString(2, theme.getBg());
+                stmt.setString(3, theme.getFg());
+                //if contains all 16 theme colors insert
+                if (theme.getColors() != null && theme.getColors().length == 16) {
+                    for (int i = 0; i < 16; i++) {
+                        stmt.setString(i + 4, theme.getColors()[i]);
                     }
-                    stmt.setString(20, theme.getUiTheme());
-                    stmt.execute();
+                    //else set to null
+                } else {
+                    for (int i = 0; i < 16; i++) {
+                        stmt.setString(i + 4, null);
+                    }
                 }
+                stmt.setString(20, theme.getUiTheme());
+                stmt.execute();
             }
         }
     }

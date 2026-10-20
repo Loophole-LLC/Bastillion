@@ -28,9 +28,15 @@ public class HostCertAuthorityDB {
     }
 
     public static List<HostCertAuthority> getHostCertAuthorities() throws SQLException, GeneralSecurityException {
+
+        try (Connection con = DBUtils.getConn()) {
+            return getHostCertAuthorities(con);
+        }
+    }
+
+    public static List<HostCertAuthority> getHostCertAuthorities(Connection con) throws SQLException {
         List<HostCertAuthority> authorities = new ArrayList<>();
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement(
+        try (PreparedStatement stmt = con.prepareStatement(
                      "select * from host_cert_authority order by create_tm asc");
              ResultSet rs = stmt.executeQuery()) {
             while (rs.next()) {
@@ -48,8 +54,15 @@ public class HostCertAuthorityDB {
 
     public static void insertHostCertAuthority(String publicKey, String fingerprint, String comment)
             throws SQLException, GeneralSecurityException {
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement(
+
+        try (Connection con = DBUtils.getConn()) {
+            insertHostCertAuthority(con, publicKey, fingerprint, comment);
+        }
+    }
+
+    public static void insertHostCertAuthority(Connection con, String publicKey, String fingerprint, String comment)
+            throws SQLException {
+        try (PreparedStatement stmt = con.prepareStatement(
                      "insert into host_cert_authority (public_key, fingerprint, comment) values (?,?,?)")) {
             stmt.setString(1, publicKey);
             stmt.setString(2, fingerprint);
@@ -59,16 +72,28 @@ public class HostCertAuthorityDB {
     }
 
     public static void deleteHostCertAuthority(Long id) throws SQLException, GeneralSecurityException {
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement("delete from host_cert_authority where id=?")) {
+
+        try (Connection con = DBUtils.getConn()) {
+            deleteHostCertAuthority(con, id);
+        }
+    }
+
+    public static void deleteHostCertAuthority(Connection con, Long id) throws SQLException {
+        try (PreparedStatement stmt = con.prepareStatement("delete from host_cert_authority where id=?")) {
             stmt.setLong(1, id);
             stmt.executeUpdate();
         }
     }
 
     public static boolean exists(String fingerprint) throws SQLException, GeneralSecurityException {
-        try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement(
+
+        try (Connection con = DBUtils.getConn()) {
+            return exists(con, fingerprint);
+        }
+    }
+
+    public static boolean exists(Connection con, String fingerprint) throws SQLException {
+        try (PreparedStatement stmt = con.prepareStatement(
                      "select 1 from host_cert_authority where fingerprint=?")) {
             stmt.setString(1, fingerprint);
             try (ResultSet rs = stmt.executeQuery()) {
