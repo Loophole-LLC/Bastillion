@@ -36,11 +36,10 @@ import static org.mockito.Mockito.when;
  * confirmed here by *not* mocking AuthDB/UserDB/DBUtils at all, so a real call to any of them
  * would fail loudly instead of silently passing.
  *
- * The LDAP-enabled path itself (JAAS LoginContext, LdapLoginModule reflection, attribute-to-
- * user mapping, JIT provisioning) needs a real or embedded directory server to exercise
- * meaningfully - not covered here; see chat for that tradeoff. getAllRoles(), the one
- * self-contained piece of LDAP-adjacent logic that only needs a JNDI DirContext, is covered
- * directly via reflection since it's private.
+ * The LDAP-enabled path itself runs against an in-memory directory in
+ * ExternalAuthUtilLdapTest, and account linking in ExternalAccountUtilTest. getAllRoles(),
+ * the one self-contained piece of LDAP-adjacent logic that only needs a JNDI DirContext, is
+ * covered directly via reflection since it's private.
  */
 @ExtendWith(MockitoExtension.class)
 class ExternalAuthUtilTest {
