@@ -234,7 +234,7 @@ public class SystemStatusDB {
 
         HostSystem hostSystem = null;
 
-        try (PreparedStatement stmt = con.prepareStatement("select * from status where (status_cd like ? or status_cd like ? or status_cd like ?) and user_id=? order by id asc")) {
+        try (PreparedStatement stmt = con.prepareStatement("select * from status where status_cd in (?,?,?) and user_id=? order by id asc")) {
             stmt.setString(1, HostSystem.INITIAL_STATUS);
             stmt.setString(2, HostSystem.AUTH_FAIL_STATUS);
             stmt.setString(3, HostSystem.PUBLIC_KEY_FAIL_STATUS);

@@ -119,8 +119,8 @@ public class SessionAuditDB {
         String orderBy = sortedSet.toOrderByClause(SORTABLE_FIELDS);
 
         String sql = "select * from session_log where 1=1 ";
-        sql += StringUtils.isNotEmpty(sortedSet.getFilterMap().get(FILTER_BY_USER)) ? " and session_log.username like ? " : "";
-        sql += StringUtils.isNotEmpty(sortedSet.getFilterMap().get(FILTER_BY_SYSTEM)) ? " and session_log.id in ( select session_id from terminal_log where terminal_log.display_nm like ?) " : "";
+        sql += StringUtils.isNotEmpty(sortedSet.getFilterMap().get(FILTER_BY_USER)) ? " and session_log.username = ? " : "";
+        sql += StringUtils.isNotEmpty(sortedSet.getFilterMap().get(FILTER_BY_SYSTEM)) ? " and session_log.id in ( select session_id from terminal_log where terminal_log.display_nm = ?) " : "";
         sql += orderBy;
 
         deleteAuditHistory(con);
