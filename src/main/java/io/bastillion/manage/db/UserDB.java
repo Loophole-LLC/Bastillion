@@ -334,7 +334,7 @@ public class UserDB {
         }
 
         try (Connection con = DBUtils.getConn();
-             PreparedStatement stmt = con.prepareStatement("select * from users where lower(username) like lower(?) and id != ?")) {
+             PreparedStatement stmt = con.prepareStatement("select * from users where lower(username) = lower(?) and id != ?")) {
             stmt.setString(1, username);
             stmt.setLong(2, userId);
             try (ResultSet rs = stmt.executeQuery()) {

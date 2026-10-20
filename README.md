@@ -217,6 +217,25 @@ username: admin
 password: changeme
 ```
 
+### Lock down the default admin account
+
+`admin` has **Full Access** (manages users, keys, and terminals on every system), and its
+default password is public, so deal with it before adding any systems:
+
+1. **Change the password right away** under **Settings → Change Password**. Bastillion
+   shows a warning until you do.
+2. **Require two-factor** for every local and LDAP login with `oneTimePassword=required`
+   (see [Configuration](#configuration)), and enroll `admin` on the next login.
+3. **With LDAP or SAML SSO, delete `admin` once a directory user has Full Access.** Sign in
+   through the directory, have `admin` set that account to **Full Access** under
+   **Manage → Users**, then sign in as it and delete `admin`. External logins are mapped
+   to local accounts by username, so a directory or IdP identity named `admin` would sign
+   in as this account; SAML logins also skip two-factor. If you want a local break-glass
+   account, give it a name your directory can never issue, a strong password, and
+   two-factor.
+4. **Limit who can reach the login page.** Put Bastillion on a management network or VPN,
+   or behind a reverse proxy that only allows trusted source addresses.
+
 Runs in the foreground; stop with Ctrl+C. For background/daemon operation use whatever your
 platform normally uses for a long-running Java process — `nohup java -jar ... &`, a systemd
 unit, a container, etc.
