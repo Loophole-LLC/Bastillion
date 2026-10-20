@@ -50,56 +50,6 @@ public class DBInitServlet extends jakarta.servlet.http.HttpServlet {
     private static final Logger log = LoggerFactory.getLogger(DBInitServlet.class);
 
     /**
-     * Host certificate authorities Bastillion trusts - the fleet equivalent of a
-     * {@code @cert-authority} line in known_hosts. A host presenting a certificate signed by
-     * one of these needs no individual host key recorded or approved for it.
-     */
-    private static final String CREATE_HOST_CERT_AUTHORITY_TABLE =
-            "create table if not exists host_cert_authority ("
-                    + "id INTEGER PRIMARY KEY AUTO_INCREMENT, "
-                    + "public_key varchar not null, "
-                    + "fingerprint varchar not null unique, "
-                    + "comment varchar, "
-                    + "create_tm timestamp not null default CURRENT_TIMESTAMP())";
-
-    /**
-     * Bastillion's SSH certificate authority keypair - see
-     * io.bastillion.manage.util.SshCertificateUtil. One row per authority type; next_serial
-     * is the certificate serial counter sshd logs and a revocation list revokes against.
-     */
-    private static final String CREATE_CERT_AUTHORITY_TABLE =
-            "create table if not exists cert_authority ("
-                    + "id INTEGER PRIMARY KEY AUTO_INCREMENT, "
-                    + "type varchar not null unique, "
-                    + "public_key varchar not null, "
-                    + "private_key varchar not null, "
-                    + "create_tm timestamp not null default CURRENT_TIMESTAMP(), "
-                    + "next_serial BIGINT not null default 0)";
-
-    /**
-     * Bastillion's known_hosts - see io.bastillion.manage.util.HostKeyVerifier. One row per
-     * host, port and key type. The offered_* columns hold the key a host presented when it
-     * did not match the trusted one, so the two can be compared instead of the new key
-     * quietly replacing the approved one.
-     */
-    private static final String CREATE_HOST_KEY_TABLE =
-            "create table if not exists host_key ("
-                    + "id INTEGER PRIMARY KEY AUTO_INCREMENT, "
-                    + "host varchar not null, "
-                    + "port INTEGER not null, "
-                    + "type varchar not null, "
-                    + "public_key varchar not null, "
-                    + "fingerprint varchar not null, "
-                    + "status varchar not null default 'TRUSTED', "
-                    + "offered_public_key varchar, "
-                    + "offered_fingerprint varchar, "
-                    + "first_seen_tm timestamp not null default CURRENT_TIMESTAMP(), "
-                    + "approved_tm timestamp, "
-                    + "approved_by INTEGER, "
-                    + "foreign key (approved_by) references users(id) on delete set null, "
-                    + "unique (host, port, type))";
-
-    /**
      * task init method that created DB and generated public/private keys
      *
      * @param config task config
@@ -153,26 +103,14 @@ public class DBInitServlet extends jakarta.servlet.http.HttpServlet {
             statement = connection.createStatement();
 
             ResultSet rs = statement.executeQuery("select * from information_schema.tables where upper(table_name) = 'USERS' and table_schema='PUBLIC'");
-            if (!rs.next()) {
+            boolean freshInstall = !rs.next();
+            DBUtils.closeRs(rs);
+
+            //create or upgrade the schema - see SchemaMigrations
+            SchemaMigrations.migrate(connection);
+
+            if (freshInstall) {
                 resetSSHKey = true;
-
-                //create DB objects
-                statement.executeUpdate("create table if not exists users (id INTEGER PRIMARY KEY AUTO_INCREMENT, first_nm varchar, last_nm varchar, email varchar, username varchar not null unique, password varchar, auth_token varchar, auth_type varchar not null default '" + Auth.AUTH_BASIC + "', user_type varchar not null default '" + Auth.ADMINISTRATOR + "', salt varchar, otp_secret varchar, last_login_tm timestamp, expiration_tm timestamp)");
-                statement.executeUpdate("create table if not exists user_theme (user_id INTEGER PRIMARY KEY, bg varchar(7), fg varchar(7), d1 varchar(7), d2 varchar(7), d3 varchar(7), d4 varchar(7), d5 varchar(7), d6 varchar(7), d7 varchar(7), d8 varchar(7), b1 varchar(7), b2 varchar(7), b3 varchar(7), b4 varchar(7), b5 varchar(7), b6 varchar(7), b7 varchar(7), b8 varchar(7), ui_theme varchar(5) not null default 'dark', foreign key (user_id) references users(id) on delete cascade) ");
-                statement.executeUpdate("create table if not exists system (id INTEGER PRIMARY KEY AUTO_INCREMENT, display_nm varchar not null, username varchar not null, host varchar not null, port INTEGER not null, authorized_keys varchar not null, status_cd varchar not null default 'INITIAL')");
-                statement.executeUpdate("create table if not exists profiles (id INTEGER PRIMARY KEY AUTO_INCREMENT, nm varchar not null, desc varchar not null)");
-                statement.executeUpdate("create table if not exists system_map (profile_id INTEGER, system_id INTEGER, foreign key (profile_id) references profiles(id) on delete cascade , foreign key (system_id) references system(id) on delete cascade, primary key (profile_id, system_id))");
-                statement.executeUpdate("create table if not exists user_map (user_id INTEGER, profile_id INTEGER, foreign key (user_id) references users(id) on delete cascade, foreign key (profile_id) references profiles(id) on delete cascade, primary key (user_id, profile_id))");
-                statement.executeUpdate("create table if not exists application_key (id INTEGER PRIMARY KEY AUTO_INCREMENT, public_key varchar not null, private_key varchar not null, passphrase varchar)");
-
-                statement.executeUpdate("create table if not exists status (id INTEGER, user_id INTEGER, status_cd varchar not null default 'INITIAL', foreign key (id) references system(id) on delete cascade, foreign key (user_id) references users(id) on delete cascade, primary key(id, user_id))");
-                statement.executeUpdate("create table if not exists scripts (id INTEGER PRIMARY KEY AUTO_INCREMENT, user_id INTEGER, display_nm varchar not null, script varchar not null, foreign key (user_id) references users(id) on delete cascade)");
-
-
-                statement.executeUpdate("create table if not exists public_keys (id INTEGER PRIMARY KEY AUTO_INCREMENT, key_nm varchar not null, type varchar, fingerprint varchar, public_key varchar, enabled boolean not null default true, create_dt timestamp not null default CURRENT_TIMESTAMP(), user_id INTEGER, profile_id INTEGER, foreign key (profile_id) references profiles(id) on delete cascade, foreign key (user_id) references users(id) on delete cascade)");
-
-                statement.executeUpdate("create table if not exists session_log (id BIGINT PRIMARY KEY AUTO_INCREMENT, session_tm timestamp default CURRENT_TIMESTAMP, first_nm varchar, last_nm varchar, username varchar not null, ip_address varchar)");
-                statement.executeUpdate("create table if not exists terminal_log (session_id BIGINT, instance_id INTEGER, output varchar not null, log_tm timestamp default CURRENT_TIMESTAMP, display_nm varchar not null, username varchar not null, host varchar not null, port INTEGER not null, foreign key (session_id) references session_log(id) on delete cascade)");
 
                 //if exists readfile to set default password
                 String salt = EncryptionUtil.generateSalt();
@@ -197,29 +135,6 @@ public class DBInitServlet extends jakarta.servlet.http.HttpServlet {
                 DBUtils.closeStmt(pStmt);
 
             }
-            DBUtils.closeRs(rs);
-
-            // Existing installations predate the interface-theme preference. H2's
-            // IF NOT EXISTS makes this migration safe on every subsequent startup.
-            statement.executeUpdate("alter table user_theme add column if not exists ui_theme varchar(5) not null default 'dark'");
-
-            // Tables added in 6.0.0. Created here rather than in the fresh-install branch
-            // above so that an existing installation picks them up on its next startup; all
-            // three are "create table if not exists", so running them every time is a no-op
-            // once they are there.
-            //
-            // Existing installations have no recorded host keys, which is why
-            // hostKeyVerification defaults to accept-new rather than strict - an upgrade
-            // records each host's key on its next connection instead of refusing every
-            // connection until a manager has approved every host.
-            statement.executeUpdate(CREATE_HOST_KEY_TABLE);
-            statement.executeUpdate(CREATE_CERT_AUTHORITY_TABLE);
-            statement.executeUpdate(CREATE_HOST_CERT_AUTHORITY_TABLE);
-
-            // How the last connection to each system authenticated, so a certificate rollout
-            // can be seen on the systems screen rather than only in the audit log. Null on
-            // every existing row until that system is next connected to.
-            statement.executeUpdate("alter table system add column if not exists last_auth_method varchar");
 
             // Generated whether or not certificate authentication is switched on: the public
             // half has to be installed on every managed system as TrustedUserCAKeys before the
