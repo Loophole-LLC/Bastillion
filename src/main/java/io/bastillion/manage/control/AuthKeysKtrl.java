@@ -13,6 +13,7 @@ import io.bastillion.common.util.AuthUtil;
 import io.bastillion.manage.db.*;
 import io.bastillion.manage.model.*;
 import io.bastillion.manage.util.EncryptionUtil;
+import io.bastillion.manage.util.OpenSSHKeyUtil;
 import io.bastillion.manage.util.PasswordUtil;
 import io.bastillion.manage.util.RefreshAuthKeyUtil;
 import io.bastillion.manage.util.SSHUtil;
@@ -342,10 +343,10 @@ public class AuthKeysKtrl extends BaseKontroller {
     private void validatePublicKey(Long userId) throws ServletException, SQLException, GeneralSecurityException {
         if (StringUtils.isBlank(publicKey.getPublicKey())) {
             addFieldError(PUBLIC_KEY_PUBLIC_KEY, REQUIRED);
-        } else if (SSHUtil.getFingerprint(publicKey.getPublicKey()) == null ||
-                SSHUtil.getKeyType(publicKey.getPublicKey()) == null) {
+        } else if (OpenSSHKeyUtil.getFingerprint(publicKey.getPublicKey()) == null ||
+                OpenSSHKeyUtil.getKeyType(publicKey.getPublicKey()) == null) {
             addFieldError(PUBLIC_KEY_PUBLIC_KEY, INVALID);
-        } else if (PublicKeyDB.isKeyDisabled(SSHUtil.getFingerprint(publicKey.getPublicKey()))) {
+        } else if (PublicKeyDB.isKeyDisabled(OpenSSHKeyUtil.getFingerprint(publicKey.getPublicKey()))) {
             addError("This key has been disabled. Please generate and set a new public key.");
             addFieldError(PUBLIC_KEY_PUBLIC_KEY, INVALID);
         } else if (PublicKeyDB.isKeyRegistered(userId, publicKey)) {
@@ -392,13 +393,13 @@ public class AuthKeysKtrl extends BaseKontroller {
 
                 byte[] pubBytes = kp.getPublic().getEncoded();
                 String sshKeyType = (type == KeyPair.ED25519) ? "ssh-ed25519" : "ssh-ed448";
-                String base64Pub = Base64.getEncoder().encodeToString(SSHUtil.encodeSSHPublicKey(sshKeyType, pubBytes));
+                String base64Pub = Base64.getEncoder().encodeToString(OpenSSHKeyUtil.encodeSSHPublicKey(sshKeyType, pubBytes));
                 pubKey = sshKeyType + " " + base64Pub + " " + username + "@" + keyname;
 
                 // Build an OpenSSH private key (unencrypted), then rewrap with ssh-keygen if passphrase provided
                 Long userId = AuthUtil.getUserId(getRequest().getSession());
                 String passphrase = publicKey.getPassphrase();
-                String privateKeyPEM = SSHUtil.buildOpenSSHPrivateKey(userId, kp, type, passphrase);
+                String privateKeyPEM = OpenSSHKeyUtil.buildOpenSSHPrivateKey(userId, kp, type, passphrase);
 
                 // Store (internally encrypted for session)
                 getRequest().getSession().setAttribute(PVT_KEY, EncryptionUtil.encrypt(privateKeyPEM));

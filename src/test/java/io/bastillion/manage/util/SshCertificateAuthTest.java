@@ -44,7 +44,7 @@ class SshCertificateAuthTest {
 
     private static String publicKey(java.security.KeyPair kp, String comment) throws Exception {
         return "ssh-ed25519 " + Base64.getEncoder().encodeToString(
-                SSHUtil.encodeSSHPublicKey("ssh-ed25519", kp.getPublic().getEncoded())) + " " + comment;
+                OpenSSHKeyUtil.encodeSSHPublicKey("ssh-ed25519", kp.getPublic().getEncoded())) + " " + comment;
     }
 
     private record Fixture(CertAuthority ca, ApplicationKey appKey) {
@@ -54,14 +54,14 @@ class SshCertificateAuthTest {
         java.security.KeyPair caKp = newKeyPair();
         CertAuthority ca = new CertAuthority();
         ca.setType(CertAuthority.USER_CA);
-        ca.setPrivateKey(SSHUtil.buildOpenSSHPrivateKey(caKp, KeyPair.ED25519));
+        ca.setPrivateKey(OpenSSHKeyUtil.buildOpenSSHPrivateKey(caKp, KeyPair.ED25519));
         ca.setPublicKey(publicKey(caKp, "bastillion-user-ca"));
 
         java.security.KeyPair appKp = newKeyPair();
         ApplicationKey appKey = new ApplicationKey();
         appKey.setId(1L);
         appKey.setPublicKey(publicKey(appKp, "bastillion@global_key"));
-        appKey.setPrivateKey(SSHUtil.buildOpenSSHPrivateKey(appKp, KeyPair.ED25519));
+        appKey.setPrivateKey(OpenSSHKeyUtil.buildOpenSSHPrivateKey(appKp, KeyPair.ED25519));
         return new Fixture(ca, appKey);
     }
 

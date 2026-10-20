@@ -274,7 +274,7 @@ public class SshCertificateUtil {
         SshReader reader = new SshReader(decoded, OPENSSH_KEY_MAGIC.length);
         String cipher = reader.readStringAsText();
         if (!"none".equals(cipher)) {
-            // SSHUtil.isEncryptedOpenSSHPrivateKey reads the same field. The CA key is stored
+            // OpenSSHKeyUtil.isEncryptedOpenSSHPrivateKey reads the same field. The CA key is stored
             // encrypted at the column level by EncryptionUtil, so what arrives here is already
             // decrypted; a passphrase-protected key would need one supplied to sign anything.
             throw new GeneralSecurityException(

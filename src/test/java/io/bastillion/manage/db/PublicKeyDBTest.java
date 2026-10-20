@@ -5,6 +5,7 @@
  */
 package io.bastillion.manage.db;
 
+import io.bastillion.manage.util.AuthorizedKeysUtil;
 import org.junit.jupiter.api.Test;
 
 import java.sql.Connection;
@@ -18,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * getPublicKeysForSystem is the query SSHUtil.addPubKey relies on to decide exactly which
+ * getPublicKeysForSystem is the query AuthorizedKeysUtil.addPubKey relies on to decide exactly which
  * keys get written into a host's authorized_keys file - get it wrong and either a host is
  * locked out (a key that should be there is missing) or a key leaks onto a system it was
  * never scoped to (present when it shouldn't be).

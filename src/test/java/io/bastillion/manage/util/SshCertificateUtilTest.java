@@ -35,9 +35,9 @@ class SshCertificateUtilTest {
     private static Ca newCa() throws Exception {
         KeyPairGenerator kpg = KeyPairGenerator.getInstance("Ed25519");
         java.security.KeyPair kp = kpg.generateKeyPair();
-        String privatePem = SSHUtil.buildOpenSSHPrivateKey(kp, KeyPair.ED25519);
+        String privatePem = OpenSSHKeyUtil.buildOpenSSHPrivateKey(kp, KeyPair.ED25519);
         String publicKey = "ssh-ed25519 " + Base64.getEncoder().encodeToString(
-                SSHUtil.encodeSSHPublicKey("ssh-ed25519", kp.getPublic().getEncoded())) + " ca@bastillion";
+                OpenSSHKeyUtil.encodeSSHPublicKey("ssh-ed25519", kp.getPublic().getEncoded())) + " ca@bastillion";
         return new Ca(privatePem, publicKey);
     }
 
@@ -45,7 +45,7 @@ class SshCertificateUtilTest {
         KeyPairGenerator kpg = KeyPairGenerator.getInstance("Ed25519");
         java.security.KeyPair kp = kpg.generateKeyPair();
         return "ssh-ed25519 " + Base64.getEncoder().encodeToString(
-                SSHUtil.encodeSSHPublicKey("ssh-ed25519", kp.getPublic().getEncoded())) + " " + comment;
+                OpenSSHKeyUtil.encodeSSHPublicKey("ssh-ed25519", kp.getPublic().getEncoded())) + " " + comment;
     }
 
     private static String sshKeygenInspect(String certificate) throws Exception {
@@ -185,10 +185,10 @@ class SshCertificateUtilTest {
         assumeTrue(sshKeygenAvailable(), "ssh-keygen not on PATH");
         KeyPairGenerator kpg = KeyPairGenerator.getInstance("Ed25519");
         java.security.KeyPair kp = kpg.generateKeyPair();
-        String encrypted = SSHUtil.rewrapWithOpenSSHKeygen("ca", SSHUtil.buildOpenSSHPrivateKey(kp, KeyPair.ED25519),
+        String encrypted = OpenSSHKeyUtil.rewrapWithOpenSSHKeygen("ca", OpenSSHKeyUtil.buildOpenSSHPrivateKey(kp, KeyPair.ED25519),
                 "a passphrase");
         String publicKey = "ssh-ed25519 " + Base64.getEncoder().encodeToString(
-                SSHUtil.encodeSSHPublicKey("ssh-ed25519", kp.getPublic().getEncoded())) + " ca@bastillion";
+                OpenSSHKeyUtil.encodeSSHPublicKey("ssh-ed25519", kp.getPublic().getEncoded())) + " ca@bastillion";
         String subject = newPublicKey("alice@laptop");
 
         GeneralSecurityException ex = assertThrows(GeneralSecurityException.class,

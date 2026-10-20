@@ -11,8 +11,8 @@ import io.bastillion.manage.model.Auth;
 import io.bastillion.manage.model.Profile;
 import io.bastillion.manage.model.PublicKey;
 import io.bastillion.manage.util.EncryptionUtil;
+import io.bastillion.manage.util.OpenSSHKeyUtil;
 import io.bastillion.manage.util.RefreshAuthKeyUtil;
-import io.bastillion.manage.util.SSHUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
@@ -78,7 +78,7 @@ class AuthKeysKtrlTest {
     private static String edEncodedPublicKey() throws Exception {
         KeyPairGenerator kpg = KeyPairGenerator.getInstance("Ed25519");
         KeyPair kp = kpg.generateKeyPair();
-        byte[] encoded = SSHUtil.encodeSSHPublicKey("ssh-ed25519", kp.getPublic().getEncoded());
+        byte[] encoded = OpenSSHKeyUtil.encodeSSHPublicKey("ssh-ed25519", kp.getPublic().getEncoded());
         return "ssh-ed25519 " + Base64.getEncoder().encodeToString(encoded) + " test@bastillion";
     }
 
@@ -279,7 +279,7 @@ class AuthKeysKtrlTest {
         try (MockedStatic<PublicKeyDB> publicKeyDB = mockStatic(PublicKeyDB.class);
              MockedStatic<io.bastillion.manage.db.ProfileDB> profileDB = mockStatic(io.bastillion.manage.db.ProfileDB.class);
              MockedStatic<UserProfileDB> userProfileDB = mockStatic(UserProfileDB.class)) {
-            publicKeyDB.when(() -> PublicKeyDB.isKeyDisabled(SSHUtil.getFingerprint(key))).thenReturn(true);
+            publicKeyDB.when(() -> PublicKeyDB.isKeyDisabled(OpenSSHKeyUtil.getFingerprint(key))).thenReturn(true);
 
             ktrl.validateSavePublicKeys();
 
@@ -301,7 +301,7 @@ class AuthKeysKtrlTest {
         try (MockedStatic<PublicKeyDB> publicKeyDB = mockStatic(PublicKeyDB.class);
              MockedStatic<io.bastillion.manage.db.ProfileDB> profileDB = mockStatic(io.bastillion.manage.db.ProfileDB.class);
              MockedStatic<UserProfileDB> userProfileDB = mockStatic(UserProfileDB.class)) {
-            publicKeyDB.when(() -> PublicKeyDB.isKeyDisabled(SSHUtil.getFingerprint(key))).thenReturn(false);
+            publicKeyDB.when(() -> PublicKeyDB.isKeyDisabled(OpenSSHKeyUtil.getFingerprint(key))).thenReturn(false);
             publicKeyDB.when(() -> PublicKeyDB.isKeyRegistered(eq(1L), any())).thenReturn(true);
 
             ktrl.validateSavePublicKeys();
@@ -326,7 +326,7 @@ class AuthKeysKtrlTest {
         try (MockedStatic<PublicKeyDB> publicKeyDB = mockStatic(PublicKeyDB.class);
              MockedStatic<io.bastillion.manage.db.ProfileDB> profileDB = mockStatic(io.bastillion.manage.db.ProfileDB.class);
              MockedStatic<UserProfileDB> userProfileDB = mockStatic(UserProfileDB.class)) {
-            publicKeyDB.when(() -> PublicKeyDB.isKeyDisabled(SSHUtil.getFingerprint(key))).thenReturn(false);
+            publicKeyDB.when(() -> PublicKeyDB.isKeyDisabled(OpenSSHKeyUtil.getFingerprint(key))).thenReturn(false);
             publicKeyDB.when(() -> PublicKeyDB.isKeyRegistered(eq(1L), any())).thenReturn(false);
 
             ktrl.validateSavePublicKeys();
@@ -351,7 +351,7 @@ class AuthKeysKtrlTest {
 
         assertNotNull(pub);
         assertTrue(pub.startsWith("ssh-ed25519 "));
-        assertNotNull(SSHUtil.getFingerprint(pub));
+        assertNotNull(OpenSSHKeyUtil.getFingerprint(pub));
         verify(session).setAttribute(eq(PVT_KEY_SESSION_ATTR), any());
     }
 }

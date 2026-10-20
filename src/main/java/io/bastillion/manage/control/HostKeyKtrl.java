@@ -13,7 +13,7 @@ import io.bastillion.manage.model.HostCertAuthority;
 import io.bastillion.manage.model.KnownHostKey;
 import io.bastillion.manage.model.SortedSet;
 import io.bastillion.manage.util.HostKeyVerifier;
-import io.bastillion.manage.util.SSHUtil;
+import io.bastillion.manage.util.OpenSSHKeyUtil;
 import loophole.mvc.annotation.Kontrol;
 import loophole.mvc.annotation.MethodType;
 import loophole.mvc.annotation.Model;
@@ -97,7 +97,7 @@ public class HostKeyKtrl extends BaseKontroller {
                 addError("A host certificate authority public key is required");
                 return reloadView();
             }
-            String fingerprint = SSHUtil.getFingerprint(publicKey.trim());
+            String fingerprint = OpenSSHKeyUtil.getFingerprint(publicKey.trim());
             if (StringUtils.isBlank(fingerprint)) {
                 addError("That does not look like an SSH public key");
                 return reloadView();

@@ -193,7 +193,7 @@ public class SshCertificateAuth {
      * @param label how to refer to the key in the message ("application SSH key", "key")
      */
     public static String unsupportedKeyTypeReason(String publicKey, String label) {
-        String keyType = SSHUtil.getKeyType(publicKey);
+        String keyType = OpenSSHKeyUtil.getKeyType(publicKey);
         if (keyType == null) {
             // getKeyType returns null for a key JSch cannot load at all. Reading that as "no
             // problem here" suppressed the startup warning this exists to emit and sent the

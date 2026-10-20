@@ -9,7 +9,7 @@ import com.jcraft.jsch.KeyPair;
 import io.bastillion.manage.model.CertAuthority;
 import io.bastillion.manage.util.DBUtils;
 import io.bastillion.manage.util.EncryptionUtil;
-import io.bastillion.manage.util.SSHUtil;
+import io.bastillion.manage.util.OpenSSHKeyUtil;
 import io.bastillion.manage.util.SshCertificateUtil;
 
 import java.io.IOException;
@@ -107,9 +107,9 @@ public class CertAuthorityDB {
 
         KeyPairGenerator kpg = KeyPairGenerator.getInstance("Ed25519");
         java.security.KeyPair kp = kpg.generateKeyPair();
-        String privateKey = SSHUtil.buildOpenSSHPrivateKey(kp, KeyPair.ED25519);
+        String privateKey = OpenSSHKeyUtil.buildOpenSSHPrivateKey(kp, KeyPair.ED25519);
         String publicKey = SshCertificateUtil.ED25519_KEY_TYPE + " "
-                + Base64.getEncoder().encodeToString(SSHUtil.encodeSSHPublicKey(
+                + Base64.getEncoder().encodeToString(OpenSSHKeyUtil.encodeSSHPublicKey(
                         SshCertificateUtil.ED25519_KEY_TYPE, kp.getPublic().getEncoded()))
                 + " bastillion-" + type.toLowerCase() + "-ca";
 

@@ -8,7 +8,7 @@ package io.bastillion.manage.db;
 import io.bastillion.manage.model.PublicKey;
 import io.bastillion.manage.model.SortedSet;
 import io.bastillion.manage.util.DBUtils;
-import io.bastillion.manage.util.SSHUtil;
+import io.bastillion.manage.util.OpenSSHKeyUtil;
 import org.apache.commons.lang3.StringUtils;
 
 import java.security.GeneralSecurityException;
@@ -226,8 +226,8 @@ public class PublicKeyDB {
                     publicKey.setKeyNm(rs.getString(KEY_NM));
                     publicKey.setPublicKey(rs.getString(PUBLIC_KEY));
                     publicKey.setProfile(ProfileDB.getProfile(con, rs.getLong(PROFILE_ID)));
-                    publicKey.setType(SSHUtil.getKeyType(publicKey.getPublicKey()));
-                    publicKey.setFingerprint(SSHUtil.getFingerprint(publicKey.getPublicKey()));
+                    publicKey.setType(OpenSSHKeyUtil.getKeyType(publicKey.getPublicKey()));
+                    publicKey.setFingerprint(OpenSSHKeyUtil.getFingerprint(publicKey.getPublicKey()));
                     publicKey.setCreateDt(rs.getTimestamp(CREATE_DT));
                     publicKey.setUsername(rs.getString("username"));
                     publicKey.setUserId(rs.getLong("user_id"));
@@ -282,8 +282,8 @@ public class PublicKeyDB {
                     publicKey.setKeyNm(rs.getString(KEY_NM));
                     publicKey.setPublicKey(rs.getString(PUBLIC_KEY));
                     publicKey.setProfile(ProfileDB.getProfile(con, rs.getLong(PROFILE_ID)));
-                    publicKey.setType(SSHUtil.getKeyType(publicKey.getPublicKey()));
-                    publicKey.setFingerprint(SSHUtil.getFingerprint(publicKey.getPublicKey()));
+                    publicKey.setType(OpenSSHKeyUtil.getKeyType(publicKey.getPublicKey()));
+                    publicKey.setFingerprint(OpenSSHKeyUtil.getFingerprint(publicKey.getPublicKey()));
                     publicKey.setCreateDt(rs.getTimestamp(CREATE_DT));
                     publicKeysList.add(publicKey);
 
@@ -412,8 +412,8 @@ public class PublicKeyDB {
 
         try (PreparedStatement stmt = con.prepareStatement("insert into public_keys(key_nm, type, fingerprint, public_key, profile_id, user_id) values (?,?,?,?,?,?)")) {
             stmt.setString(1, publicKey.getKeyNm());
-            stmt.setString(2, SSHUtil.getKeyType(publicKey.getPublicKey()));
-            stmt.setString(3, SSHUtil.getFingerprint(publicKey.getPublicKey()));
+            stmt.setString(2, OpenSSHKeyUtil.getKeyType(publicKey.getPublicKey()));
+            stmt.setString(3, OpenSSHKeyUtil.getFingerprint(publicKey.getPublicKey()));
             stmt.setString(4, publicKey.getPublicKey().trim());
             if (publicKey.getProfile() == null || publicKey.getProfile().getId() == null) {
                 stmt.setNull(5, Types.NULL);
@@ -448,8 +448,8 @@ public class PublicKeyDB {
 
         try (PreparedStatement stmt = con.prepareStatement("update public_keys set key_nm=?, type=?, fingerprint=?, public_key=?, profile_id=? where id=? and user_id=? and enabled=true")) {
             stmt.setString(1, publicKey.getKeyNm());
-            stmt.setString(2, SSHUtil.getKeyType(publicKey.getPublicKey()));
-            stmt.setString(3, SSHUtil.getFingerprint(publicKey.getPublicKey()));
+            stmt.setString(2, OpenSSHKeyUtil.getKeyType(publicKey.getPublicKey()));
+            stmt.setString(3, OpenSSHKeyUtil.getFingerprint(publicKey.getPublicKey()));
             stmt.setString(4, publicKey.getPublicKey().trim());
             if (publicKey.getProfile() == null || publicKey.getProfile().getId() == null) {
                 stmt.setNull(5, Types.NULL);
@@ -570,7 +570,7 @@ public class PublicKeyDB {
 
         try (PreparedStatement stmt = con.prepareStatement("select * from public_keys where user_id=? and fingerprint=? and profile_id = ? and id <> ?")) {
             stmt.setLong(1, userId);
-            stmt.setString(2, SSHUtil.getFingerprint(publicKey.getPublicKey()));
+            stmt.setString(2, OpenSSHKeyUtil.getFingerprint(publicKey.getPublicKey()));
             if (publicKey.getProfile() != null && publicKey.getProfile().getId() != null) {
                 stmt.setLong(3, publicKey.getProfile().getId());
             } else {
@@ -625,8 +625,8 @@ public class PublicKeyDB {
                     publicKey.setKeyNm(rs.getString(KEY_NM));
                     publicKey.setPublicKey(rs.getString(PUBLIC_KEY));
                     publicKey.setProfile(ProfileDB.getProfile(con, rs.getLong(PROFILE_ID)));
-                    publicKey.setType(SSHUtil.getKeyType(publicKey.getPublicKey()));
-                    publicKey.setFingerprint(SSHUtil.getFingerprint(publicKey.getPublicKey()));
+                    publicKey.setType(OpenSSHKeyUtil.getKeyType(publicKey.getPublicKey()));
+                    publicKey.setFingerprint(OpenSSHKeyUtil.getFingerprint(publicKey.getPublicKey()));
                     publicKey.setCreateDt(rs.getTimestamp(CREATE_DT));
                     keyMap.put(publicKey.getKeyNm() + " (" + publicKey.getFingerprint() + ")", publicKey);
 
