@@ -63,11 +63,11 @@ public class ProfileDB {
         String sql = "select distinct p.* from  profiles p ";
         if (StringUtils.isNotEmpty(sortedSet.getFilterMap().get(FILTER_BY_SYSTEM))) {
             sql = sql + ", system_map m, system s where m.profile_id = p.id and m.system_id = s.id" +
-                    " and (lower(s.display_nm) like ? or lower(s.host) like ?)";
+                    " and (lower(s.display_nm) like ? or lower(s.host) like ?)"; // intentional LIKE: substring search
         } else if (StringUtils.isNotEmpty(sortedSet.getFilterMap().get(FILTER_BY_USER))) {
             sql = sql + ", user_map m, users u where m.profile_id = p.id and m.user_id = u.id" +
-                    " and (lower(u.first_nm) like ? or lower(u.last_nm) like ?" +
-                    " or lower(u.email) like ? or lower(u.username) like ?)";
+                    " and (lower(u.first_nm) like ? or lower(u.last_nm) like ?" + // intentional LIKE: substring search
+                    " or lower(u.email) like ? or lower(u.username) like ?)"; // intentional LIKE: substring search
         }
         sql = sql + orderBy;
 

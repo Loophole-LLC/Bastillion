@@ -122,7 +122,7 @@ public class UserDB {
 
 
         String orderBy = sortedSet.toOrderByClause(SORTABLE_FIELDS);
-        String sql = "select u.*, m.profile_id from users u left join user_map  m on m.user_id = u.id and m.profile_id = ? where u.user_type like '" + User.ADMINISTRATOR + "'" + orderBy;
+        String sql = "select u.*, m.profile_id from users u left join user_map  m on m.user_id = u.id and m.profile_id = ? where u.user_type = '" + User.ADMINISTRATOR + "'" + orderBy;
 
         try (PreparedStatement stmt = con.prepareStatement(sql)) {
             stmt.setLong(1, profileId);
