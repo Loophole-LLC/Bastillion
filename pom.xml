@@ -130,6 +130,19 @@
             <version>7.0.5</version>
             <scope>test</scope>
         </dependency>
+        <!-- in-process SSH/SFTP server for exercising SSHUtil's connections end to end -->
+        <dependency>
+            <groupId>org.apache.sshd</groupId>
+            <artifactId>sshd-core</artifactId>
+            <version>2.19.0</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.sshd</groupId>
+            <artifactId>sshd-sftp</artifactId>
+            <version>2.19.0</version>
+            <scope>test</scope>
+        </dependency>
 
         <!-- Database -->
         <dependency>

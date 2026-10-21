@@ -561,8 +561,14 @@ public class SSHUtil {
     }
 
     /**
-     * Records a failure, singling out a refused host key so the systems list can say what
-     * actually happened and point at the screen that resolves it.
+     * Records a failure as the status the screens act on: a refused host key points at the
+     * Host Keys screen, and the two authentication failures are what make the terminal and
+     * systems screens prompt for a password (AUTHFAIL) or a key passphrase (KEYAUTHFAIL)
+     * and try again.
+     * <p>
+     * Shared by every connection path. Opening a terminal had its own copy that only knew
+     * about host keys, so from 4.0.0 a host that wanted a password reported a bare "Failed"
+     * and the password prompt that createTerms is built around never appeared.
      */
     private static void recordFailure(HostSystem hostSystem, Exception ex) {
         if (isHostKeyRejection(ex)) {
@@ -572,7 +578,23 @@ public class SSHUtil {
             return;
         }
         hostSystem.setErrorMsg(ex.getMessage());
-        hostSystem.setStatusCd(HostSystem.GENERIC_FAIL_STATUS);
+        // Null for a SocketTimeoutException, an InterruptedException, or any NPE raised
+        // without one - and this runs in the handler, so throwing here escapes the caller
+        // entirely and turns a reportable failure into an HTTP 500.
+        String msg = StringUtils.trimToEmpty(ex.getMessage()).toLowerCase();
+        // JSch 2.x refuses a missing or wrong key passphrase in addIdentity, before
+        // connecting, rather than with the USERAUTH fail it raises for a key still
+        // encrypted at authentication time - both mean "ask for the passphrase".
+        if (msg.contains("userauth fail") || msg.contains("incorrect passphrase")) {
+            hostSystem.setStatusCd(HostSystem.PUBLIC_KEY_FAIL_STATUS);
+        } else if (msg.contains("auth fail") || msg.contains("auth cancel")) {
+            hostSystem.setStatusCd(HostSystem.AUTH_FAIL_STATUS);
+        } else if (msg.contains("unknownhostexception")) {
+            hostSystem.setErrorMsg("DNS Lookup Failed");
+            hostSystem.setStatusCd(HostSystem.HOST_FAIL_STATUS);
+        } else {
+            hostSystem.setStatusCd(HostSystem.GENERIC_FAIL_STATUS);
+        }
     }
 
     // --- Authentication and Add Key ---
@@ -602,23 +624,7 @@ public class SSHUtil {
 
         } catch (Exception ex) {
             log.info(ex.toString(), ex);
-            if (isHostKeyRejection(ex)) {
-                recordFailure(hostSystem, ex);
-                if (session != null) session.disconnect();
-                return hostSystem;
-            }
-            hostSystem.setErrorMsg(ex.getMessage());
-            // Null for a SocketTimeoutException, an InterruptedException, or any NPE raised
-            // without one - and this is the handler, so throwing here escapes the method
-            // entirely and turns a reportable failure into an HTTP 500.
-            String msg = StringUtils.trimToEmpty(ex.getMessage()).toLowerCase();
-            if (msg.contains("userauth fail")) hostSystem.setStatusCd(HostSystem.PUBLIC_KEY_FAIL_STATUS);
-            else if (msg.contains("auth fail") || msg.contains("auth cancel"))
-                hostSystem.setStatusCd(HostSystem.AUTH_FAIL_STATUS);
-            else if (msg.contains("unknownhostexception")) {
-                hostSystem.setErrorMsg("DNS Lookup Failed");
-                hostSystem.setStatusCd(HostSystem.HOST_FAIL_STATUS);
-            } else hostSystem.setStatusCd(HostSystem.GENERIC_FAIL_STATUS);
+            recordFailure(hostSystem, ex);
         }
         if (session != null) session.disconnect();
         return hostSystem;
