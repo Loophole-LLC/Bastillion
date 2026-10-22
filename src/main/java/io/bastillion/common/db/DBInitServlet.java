@@ -59,200 +59,237 @@ public class DBInitServlet extends jakarta.servlet.http.HttpServlet {
 
         super.init(config);
 
-        Connection connection = null;
-        Statement statement = null;
         //check if reset ssh application key is set
         boolean resetSSHKey = "true".equals(AppConfig.getProperty("resetApplicationSSHKey"));
 
         try {
-            //if DB password is empty generate a random
-            if (StringUtils.isEmpty(AppConfig.getProperty("dbPassword"))) {
-                String dbPassword = null;
-                String dbPasswordConfirm = null;
-                if (!"true".equals(System.getProperty("GEN_DB_PASS"))) {
-                    //prompt for password and confirmation
-                    while (dbPassword == null || !dbPassword.equals(dbPasswordConfirm)) {
-                        if (System.console() == null) {
-                            Scanner in = new Scanner(System.in);
-                            System.out.println("Please enter database password: ");
-                            dbPassword = in.nextLine();
-                            System.out.println("Please confirm database password: ");
-                            dbPasswordConfirm = in.nextLine();
-                        } else {
-                            dbPassword = new String(System.console().readPassword("Please enter database password: "));
-                            dbPasswordConfirm = new String(System.console().readPassword("Please confirm database password: "));
-                        }
-                        if (!dbPassword.equals(dbPasswordConfirm)) {
-                            System.out.println("Passwords do not match");
-                        }
-                    }
-                }
-                //set password
-                if (StringUtils.isNotEmpty(dbPassword)) {
-                    AppConfig.encryptProperty("dbPassword", dbPassword);
-                    //if password not set generate a random
-                } else {
-                    System.out.println("Generating random database password");
-                    AppConfig.encryptProperty("dbPassword", RandomStringUtils.random(32, true, true));
-                }
-                //else encrypt password if plain-text
-            } else if (!AppConfig.isPropertyEncrypted("dbPassword")) {
-                AppConfig.encryptProperty("dbPassword", AppConfig.getProperty("dbPassword"));
-            }
+            ensureDbPassword();
 
-            connection = DBUtils.getConn();
-            statement = connection.createStatement();
+            try (Connection connection = DBUtils.getConn()) {
+                boolean freshInstall = isFreshInstall(connection);
 
-            ResultSet rs = statement.executeQuery("select * from information_schema.tables where upper(table_name) = 'USERS' and table_schema='PUBLIC'");
-            boolean freshInstall = !rs.next();
-            DBUtils.closeRs(rs);
+                //create or upgrade the schema - see SchemaMigrations
+                SchemaMigrations.migrate(connection);
 
-            //create or upgrade the schema - see SchemaMigrations
-            SchemaMigrations.migrate(connection);
-
-            if (freshInstall) {
-                resetSSHKey = true;
-
-                //if exists readfile to set default password
-                String salt = EncryptionUtil.generateSalt();
-                String defaultPassword = EncryptionUtil.hashV2("changeme", salt);
-
-                //set password if running in EC2
-                File file = new File("/opt/bastillion/instance_id");
-                if (file.exists()) {
-                    String str = FileUtils.readFileToString(file, "UTF-8");
-                    if (StringUtils.isNotEmpty(str)) {
-                        defaultPassword = EncryptionUtil.hashV2(str.trim(), salt);
-                    }
+                if (freshInstall) {
+                    resetSSHKey = true;
+                    insertDefaultAdmin(connection);
                 }
 
-                //insert default admin user
-                PreparedStatement pStmt = connection.prepareStatement("insert into users (username, password, user_type, salt) values(?,?,?,?)");
-                pStmt.setString(1, "admin");
-                pStmt.setString(2, defaultPassword);
-                pStmt.setString(3, Auth.MANAGER);
-                pStmt.setString(4, salt);
-                pStmt.execute();
-                DBUtils.closeStmt(pStmt);
+                generateUserCertAuthority();
 
-            }
-
-            // Generated whether or not certificate authentication is switched on: the public
-            // half has to be installed on every managed system as TrustedUserCAKeys before the
-            // feature can be enabled, so an operator has to be able to read it first. On its
-            // own it grants nothing - nothing trusts this key until a host is told to.
-            String caPublicKey = CertAuthorityDB.generateIfAbsent(CertAuthority.USER_CA);
-            if (caPublicKey != null) {
-                System.out.println("Bastillion Generated SSH User Certificate Authority Key:");
-                System.out.println(caPublicKey);
-                System.out.println("Install this on managed systems as TrustedUserCAKeys to use "
-                        + "certificate authentication (sshCertificateAuth=on).");
-            }
-
-            //if reset ssh application key then generate new key
-            if (resetSSHKey) {
-
-                //delete old key entry
-                PreparedStatement pStmt = connection.prepareStatement("delete from application_key");
-                pStmt.execute();
-                DBUtils.closeStmt(pStmt);
-
-                //generate new key and insert passphrase
-                System.out.println("Setting Bastillion SSH public/private key pair");
-
-                //generate application pub/pvt key and get values
-                String passphrase = SSHUtil.keyGen();
-                String publicKey = SSHUtil.getPublicKey();
-                String privateKey = SSHUtil.getPrivateKey();
-
-                //insert new keys
-                pStmt = connection.prepareStatement("insert into application_key (public_key, private_key, passphrase) values(?,?,?)");
-                pStmt.setString(1, publicKey);
-                pStmt.setString(2, EncryptionUtil.encrypt(privateKey));
-                pStmt.setString(3, EncryptionUtil.encrypt(passphrase));
-                pStmt.execute();
-                DBUtils.closeStmt(pStmt);
-
-                System.out.println("Bastillion Generated Global Public Key:");
-                System.out.println(publicKey);
-
-                //set config to default
-                AppConfig.updateProperty("publicKey", "");
-                AppConfig.updateProperty("privateKey", "");
-                AppConfig.updateProperty("defaultSSHPassphrase", "${randomPassphrase}");
-
-                //set to false
-                AppConfig.updateProperty("resetApplicationSSHKey", "false");
-
-            }
-
-            // keyManagement=off means Bastillion never puts its key on a host, so with
-            // certificate authentication also off it has no way to gain access to a system it
-            // has not already been let into by hand. Worth saying out loud at startup rather
-            // than leaving as a run of failed registrations.
-            if (KeyManagement.mode() == KeyManagement.Mode.OFF && !SshCertificateAuth.isEnabled()) {
-                String warning = "WARNING: keyManagement=off and sshCertificateAuth=off. Bastillion "
-                        + "will not add its public key to any system, so a system is only reachable if "
-                        + "its authorized_keys already contains the application key. Set "
-                        + "sshCertificateAuth=on (and install the CA key on each host), or use "
-                        + "keyManagement=append.";
-                System.out.println(warning);
-                log.error(warning);
-            }
-
-            // sshCertificateAuth only works with an Ed25519 application key, and sshKeyType
-            // accepts rsa/ecdsa/ed448 too. Without this the mismatch is invisible: issuing
-            // fails, connections quietly fall back to plain key authentication and keep
-            // working, so nothing looks wrong until somebody wonders why no host ever logs a
-            // certificate.
-            if (SshCertificateAuth.isEnabled()) {
-                ApplicationKey appKey = PrivateKeyDB.getApplicationKey();
-                String unsupported = appKey == null ? null
-                        : SshCertificateAuth.unsupportedKeyTypeReason(appKey.getPublicKey());
-                if (unsupported != null) {
-                    String warning = "WARNING: sshCertificateAuth=on. " + unsupported
-                            + " Until then every connection silently falls back to plain public "
-                            + "key authentication.";
-                    System.out.println(warning);
-                    log.error(warning);
+                //if reset ssh application key then generate new key
+                if (resetSSHKey) {
+                    resetApplicationKey(connection);
                 }
+
+                warnAboutConfiguration();
+
+                //delete ssh keys
+                SSHUtil.deletePvtGenSSHKey();
             }
 
-            String userValidityWarning = SshCertificateAuth.excessiveUserValidityWarning();
-            if (userValidityWarning != null) {
-                System.out.println("WARNING: " + userValidityWarning);
-                log.error(userValidityWarning);
-            }
-
-            String validityWarning = SshCertificateAuth.excessiveValidityWarning();
-            if (validityWarning != null) {
-                System.out.println("WARNING: " + validityWarning);
-                log.error(validityWarning);
-            }
-
-            // An LDAP setup that cannot work - jaasModule naming no jaas.conf entry, or an entry
-            // naming a login module class that is not there - otherwise only shows up as
-            // every directory user being told they have the wrong password.
-            String ldapProblem = ExternalAuthUtil.configurationProblem();
-            if (ldapProblem != null) {
-                String warning = "WARNING: LDAP login will fail: " + ldapProblem
-                        + ". Until this is fixed only local accounts can sign in.";
-                System.out.println(warning);
-                log.error(warning);
-            }
-
-            //delete ssh keys
-            SSHUtil.deletePvtGenSSHKey();
-
-            DBUtils.closeStmt(statement);
-            DBUtils.closeConn(connection);
-
-        } catch (SQLException | ConfigurationException | InterruptedException| IOException | GeneralSecurityException | JSchException ex) {
+        } catch (SQLException | ConfigurationException | InterruptedException | IOException | GeneralSecurityException | JSchException ex) {
             log.error(ex.toString(), ex);
             throw new ServletException(ex.toString(), ex);
         }
 
         RefreshAuthKeyUtil.startRefreshAllSystemsTimerTask();
+    }
+
+    /**
+     * Makes sure the database password is set and stored encrypted: prompts for one on first
+     * start (or generates one with -DGEN_DB_PASS=true), and encrypts one left in plain text.
+     */
+    private static void ensureDbPassword() throws ConfigurationException, GeneralSecurityException {
+        //if DB password is empty generate a random
+        if (StringUtils.isEmpty(AppConfig.getProperty("dbPassword"))) {
+            String dbPassword = null;
+            String dbPasswordConfirm = null;
+            if (!"true".equals(System.getProperty("GEN_DB_PASS"))) {
+                //prompt for password and confirmation
+                while (dbPassword == null || !dbPassword.equals(dbPasswordConfirm)) {
+                    if (System.console() == null) {
+                        Scanner in = new Scanner(System.in);
+                        System.out.println("Please enter database password: ");
+                        dbPassword = in.nextLine();
+                        System.out.println("Please confirm database password: ");
+                        dbPasswordConfirm = in.nextLine();
+                    } else {
+                        dbPassword = new String(System.console().readPassword("Please enter database password: "));
+                        dbPasswordConfirm = new String(System.console().readPassword("Please confirm database password: "));
+                    }
+                    if (!dbPassword.equals(dbPasswordConfirm)) {
+                        System.out.println("Passwords do not match");
+                    }
+                }
+            }
+            //set password
+            if (StringUtils.isNotEmpty(dbPassword)) {
+                AppConfig.encryptProperty("dbPassword", dbPassword);
+                //if password not set generate a random
+            } else {
+                System.out.println("Generating random database password");
+                AppConfig.encryptProperty("dbPassword", RandomStringUtils.random(32, true, true));
+            }
+            //else encrypt password if plain-text
+        } else if (!AppConfig.isPropertyEncrypted("dbPassword")) {
+            AppConfig.encryptProperty("dbPassword", AppConfig.getProperty("dbPassword"));
+        }
+    }
+
+    /**
+     * True when there is no users table yet, i.e. this is the first start against this
+     * database. Checked before the migrations run, since they create it.
+     */
+    private static boolean isFreshInstall(Connection connection) throws SQLException {
+        try (Statement statement = connection.createStatement();
+             ResultSet rs = statement.executeQuery("select * from information_schema.tables where upper(table_name) = 'USERS' and table_schema='PUBLIC'")) {
+            return !rs.next();
+        }
+    }
+
+    /**
+     * Creates the admin account a fresh install starts with: password "changeme", or the EC2
+     * instance id when running from the Bastillion AMI.
+     */
+    private static void insertDefaultAdmin(Connection connection)
+            throws SQLException, IOException, GeneralSecurityException {
+        //if exists readfile to set default password
+        String salt = EncryptionUtil.generateSalt();
+        String defaultPassword = EncryptionUtil.hashV2("changeme", salt);
+
+        //set password if running in EC2
+        File file = new File("/opt/bastillion/instance_id");
+        if (file.exists()) {
+            String str = FileUtils.readFileToString(file, "UTF-8");
+            if (StringUtils.isNotEmpty(str)) {
+                defaultPassword = EncryptionUtil.hashV2(str.trim(), salt);
+            }
+        }
+
+        //insert default admin user
+        try (PreparedStatement pStmt = connection.prepareStatement("insert into users (username, password, user_type, salt) values(?,?,?,?)")) {
+            pStmt.setString(1, "admin");
+            pStmt.setString(2, defaultPassword);
+            pStmt.setString(3, Auth.MANAGER);
+            pStmt.setString(4, salt);
+            pStmt.execute();
+        }
+    }
+
+    private static void generateUserCertAuthority() throws SQLException, GeneralSecurityException, IOException {
+        // Generated whether or not certificate authentication is switched on: the public
+        // half has to be installed on every managed system as TrustedUserCAKeys before the
+        // feature can be enabled, so an operator has to be able to read it first. On its
+        // own it grants nothing - nothing trusts this key until a host is told to.
+        String caPublicKey = CertAuthorityDB.generateIfAbsent(CertAuthority.USER_CA);
+        if (caPublicKey != null) {
+            System.out.println("Bastillion Generated SSH User Certificate Authority Key:");
+            System.out.println(caPublicKey);
+            System.out.println("Install this on managed systems as TrustedUserCAKeys to use "
+                    + "certificate authentication (sshCertificateAuth=on).");
+        }
+    }
+
+    /**
+     * Replaces the application SSH key pair with a newly generated one and resets the
+     * properties that ask for it.
+     */
+    private static void resetApplicationKey(Connection connection)
+            throws SQLException, ConfigurationException, IOException, GeneralSecurityException,
+            InterruptedException, JSchException {
+        //delete old key entry
+        try (PreparedStatement pStmt = connection.prepareStatement("delete from application_key")) {
+            pStmt.execute();
+        }
+
+        //generate new key and insert passphrase
+        System.out.println("Setting Bastillion SSH public/private key pair");
+
+        //generate application pub/pvt key and get values
+        String passphrase = SSHUtil.keyGen();
+        String publicKey = SSHUtil.getPublicKey();
+        String privateKey = SSHUtil.getPrivateKey();
+
+        //insert new keys
+        try (PreparedStatement pStmt = connection.prepareStatement("insert into application_key (public_key, private_key, passphrase) values(?,?,?)")) {
+            pStmt.setString(1, publicKey);
+            pStmt.setString(2, EncryptionUtil.encrypt(privateKey));
+            pStmt.setString(3, EncryptionUtil.encrypt(passphrase));
+            pStmt.execute();
+        }
+
+        System.out.println("Bastillion Generated Global Public Key:");
+        System.out.println(publicKey);
+
+        //set config to default
+        AppConfig.updateProperty("publicKey", "");
+        AppConfig.updateProperty("privateKey", "");
+        AppConfig.updateProperty("defaultSSHPassphrase", "${randomPassphrase}");
+
+        //set to false
+        AppConfig.updateProperty("resetApplicationSSHKey", "false");
+    }
+
+    /**
+     * Startup warnings for settings that are accepted but cannot work as configured, each
+     * printed to the console and the error log.
+     */
+    private static void warnAboutConfiguration() throws SQLException, GeneralSecurityException {
+        // keyManagement=off means Bastillion never puts its key on a host, so with
+        // certificate authentication also off it has no way to gain access to a system it
+        // has not already been let into by hand. Worth saying out loud at startup rather
+        // than leaving as a run of failed registrations.
+        if (KeyManagement.mode() == KeyManagement.Mode.OFF && !SshCertificateAuth.isEnabled()) {
+            warn("WARNING: keyManagement=off and sshCertificateAuth=off. Bastillion "
+                    + "will not add its public key to any system, so a system is only reachable if "
+                    + "its authorized_keys already contains the application key. Set "
+                    + "sshCertificateAuth=on (and install the CA key on each host), or use "
+                    + "keyManagement=append.");
+        }
+
+        // sshCertificateAuth only works with an Ed25519 application key, and sshKeyType
+        // accepts rsa/ecdsa/ed448 too. Without this the mismatch is invisible: issuing
+        // fails, connections quietly fall back to plain key authentication and keep
+        // working, so nothing looks wrong until somebody wonders why no host ever logs a
+        // certificate.
+        if (SshCertificateAuth.isEnabled()) {
+            ApplicationKey appKey = PrivateKeyDB.getApplicationKey();
+            String unsupported = appKey == null ? null
+                    : SshCertificateAuth.unsupportedKeyTypeReason(appKey.getPublicKey());
+            if (unsupported != null) {
+                warn("WARNING: sshCertificateAuth=on. " + unsupported
+                        + " Until then every connection silently falls back to plain public "
+                        + "key authentication.");
+            }
+        }
+
+        String userValidityWarning = SshCertificateAuth.excessiveUserValidityWarning();
+        if (userValidityWarning != null) {
+            System.out.println("WARNING: " + userValidityWarning);
+            log.error(userValidityWarning);
+        }
+
+        String validityWarning = SshCertificateAuth.excessiveValidityWarning();
+        if (validityWarning != null) {
+            System.out.println("WARNING: " + validityWarning);
+            log.error(validityWarning);
+        }
+
+        // An LDAP setup that cannot work - jaasModule naming no jaas.conf entry, or an entry
+        // naming a login module class that is not there - otherwise only shows up as
+        // every directory user being told they have the wrong password.
+        String ldapProblem = ExternalAuthUtil.configurationProblem();
+        if (ldapProblem != null) {
+            warn("WARNING: LDAP login will fail: " + ldapProblem
+                    + ". Until this is fixed only local accounts can sign in.");
+        }
+    }
+
+    private static void warn(String warning) {
+        System.out.println(warning);
+        log.error(warning);
     }
 
 }
