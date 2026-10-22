@@ -1,0 +1,6 @@
+# Text files are stored and checked out with LF line endings, whatever the platform.
+# The repository had drifted into a mix - some files CRLF, some LF, and many templates
+# with both inside the same file, as edits from different editors added lines.
+* text=auto eol=lf
+
+*.png binary
