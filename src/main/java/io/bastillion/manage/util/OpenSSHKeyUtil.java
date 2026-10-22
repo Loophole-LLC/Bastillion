@@ -47,6 +47,79 @@ public class OpenSSHKeyUtil {
                 unencryptedPEM, passphrase);
     }
 
+    /**
+     * Whether a pasted public key is exactly one plain authorized_keys entry:
+     * "&lt;algorithm&gt; &lt;base64 key&gt; [comment]", with the key encoding a public key of that
+     * same algorithm and nothing more. {@link #getFingerprint} and {@link #getKeyType} accept
+     * anything containing "ssh-", which JSch then parses leniently, so "ssh-ed25519 x" got a
+     * fingerprint, "ssh-rsa" in front of an ed25519 key was taken as RSA, and whatever came
+     * before the algorithm - authorized_keys options included - was stored and pushed to
+     * hosts exactly as typed.
+     */
+    public static boolean isWellFormedPublicKey(String publicKey) {
+        if (StringUtils.isBlank(publicKey)) {
+            return false;
+        }
+        String[] parts = publicKey.trim().split("\\s+", 3);
+        if (parts.length < 2) {
+            return false;
+        }
+        String algorithm = parts[0];
+        ByteBuffer blob;
+        try {
+            blob = ByteBuffer.wrap(Base64.getDecoder().decode(parts[1]));
+        } catch (IllegalArgumentException ex) {
+            return false;
+        }
+        if (!algorithm.equals(readSSHString(blob, StandardCharsets.US_ASCII))) {
+            return false;
+        }
+        boolean wellFormed = switch (algorithm) {
+            case "ssh-ed25519" -> length(readSSHBytes(blob)) == 32;
+            case "ssh-ed448" -> length(readSSHBytes(blob)) == 57;
+            // e, then a modulus of at least 1024 bits (plus mpint's possible leading zero)
+            case "ssh-rsa" -> length(readSSHBytes(blob)) > 0 && length(readSSHBytes(blob)) >= 128;
+            case "ssh-dss" -> length(readSSHBytes(blob)) > 0 && length(readSSHBytes(blob)) > 0
+                    && length(readSSHBytes(blob)) > 0 && length(readSSHBytes(blob)) > 0;
+            case "ecdsa-sha2-nistp256", "ecdsa-sha2-nistp384", "ecdsa-sha2-nistp521" ->
+                    algorithm.endsWith("-" + readSSHString(blob, StandardCharsets.US_ASCII))
+                            && isUncompressedPoint(readSSHBytes(blob), switch (algorithm) {
+                        case "ecdsa-sha2-nistp256" -> 65;
+                        case "ecdsa-sha2-nistp384" -> 97;
+                        default -> 133;
+                    });
+            default -> false;
+        };
+        return wellFormed && !blob.hasRemaining() && getFingerprint(publicKey) != null;
+    }
+
+    /** An SSH wire-format string, or null when the buffer does not hold a whole one. */
+    private static byte[] readSSHBytes(ByteBuffer buffer) {
+        if (buffer.remaining() < 4) {
+            return null;
+        }
+        int length = buffer.getInt();
+        if (length < 0 || length > buffer.remaining()) {
+            return null;
+        }
+        byte[] bytes = new byte[length];
+        buffer.get(bytes);
+        return bytes;
+    }
+
+    private static String readSSHString(ByteBuffer buffer, java.nio.charset.Charset charset) {
+        byte[] bytes = readSSHBytes(buffer);
+        return bytes == null ? null : new String(bytes, charset);
+    }
+
+    private static int length(byte[] bytes) {
+        return bytes == null ? -1 : bytes.length;
+    }
+
+    private static boolean isUncompressedPoint(byte[] point, int length) {
+        return point != null && point.length == length && point[0] == 0x04;
+    }
+
     public static String getFingerprint(String publicKey) {
         String fingerprint = null;
         if (StringUtils.isNotEmpty(publicKey)) {

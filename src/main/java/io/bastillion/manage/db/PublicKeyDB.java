@@ -98,15 +98,28 @@ public class PublicKeyDB {
     }
 
     /**
-     * disables SSH key
+     * disables SSH key - every record of it, not just this one. The same key can be
+     * registered more than once (under several profiles, or by several users), and disabling
+     * promises it is removed from every system: disabling one record left the others pushing
+     * it to theirs.
      *
      * @param con DB connection
      * @param id key id
      */
     public static void disableKey(Connection con, Long id) throws SQLException {
+        setEnabledForKey(con, id, false);
+    }
 
-        try (PreparedStatement stmt = con.prepareStatement("update public_keys set enabled=false where id=?")) {
-            stmt.setLong(1, id);
+    /**
+     * Sets enabled on the key and every other record with its fingerprint. The id is matched
+     * as well since a fingerprint can be missing from rows written by older releases.
+     */
+    private static void setEnabledForKey(Connection con, Long id, boolean enabled) throws SQLException {
+        try (PreparedStatement stmt = con.prepareStatement("update public_keys set enabled=? where id=? "
+                + "or fingerprint=(select fingerprint from public_keys where id=?)")) {
+            stmt.setBoolean(1, enabled);
+            stmt.setLong(2, id);
+            stmt.setLong(3, id);
             stmt.execute();
         }
     }
@@ -124,17 +137,14 @@ public class PublicKeyDB {
     }
 
     /**
-     * re-enables SSH key
+     * re-enables SSH key - every record of it, as {@link #disableKey(Connection, Long)}
+     * disabled them all
      *
      * @param con DB connection
      * @param id key id
      */
     public static void enableKey(Connection con, Long id) throws SQLException {
-
-        try (PreparedStatement stmt = con.prepareStatement("update public_keys set enabled=true where id=?")) {
-            stmt.setLong(1, id);
-            stmt.execute();
-        }
+        setEnabledForKey(con, id, true);
     }
 
     /**
@@ -568,18 +578,22 @@ public class PublicKeyDB {
     public static boolean isKeyRegistered(Connection con, Long userId, PublicKey publicKey) throws SQLException {
         boolean isDuplicate = false;
 
-        try (PreparedStatement stmt = con.prepareStatement("select * from public_keys where user_id=? and fingerprint=? and profile_id = ? and id <> ?")) {
-            stmt.setLong(1, userId);
-            stmt.setString(2, OpenSSHKeyUtil.getFingerprint(publicKey.getPublicKey()));
-            if (publicKey.getProfile() != null && publicKey.getProfile().getId() != null) {
-                stmt.setLong(3, publicKey.getProfile().getId());
-            } else {
-                stmt.setNull(3, Types.NULL);
+        // Not "profile_id = ? and id <> ?" with nulls bound: in SQL both are unknown, never
+        // true, so a new key (no id yet) was never found to be a duplicate, nor was any key
+        // registered for all systems (no profile).
+        Long profileId = publicKey.getProfile() != null ? publicKey.getProfile().getId() : null;
+        String sql = "select * from public_keys where user_id=? and fingerprint=?"
+                + (profileId != null ? " and profile_id=?" : " and profile_id is null")
+                + (publicKey.getId() != null ? " and id<>?" : "");
+        try (PreparedStatement stmt = con.prepareStatement(sql)) {
+            int i = 1;
+            stmt.setLong(i++, userId);
+            stmt.setString(i++, OpenSSHKeyUtil.getFingerprint(publicKey.getPublicKey()));
+            if (profileId != null) {
+                stmt.setLong(i++, profileId);
             }
             if (publicKey.getId() != null) {
-                stmt.setLong(4, publicKey.getId());
-            } else {
-                stmt.setNull(4, Types.NULL);
+                stmt.setLong(i, publicKey.getId());
             }
 
             try (ResultSet rs = stmt.executeQuery()) {

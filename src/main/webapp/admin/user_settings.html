@@ -140,17 +140,17 @@
                 </div>
                 <span class="settings-card-actions">
                     <button type="button" class="btn btn-secondary copy_btn"
-                            th:if="${certAuthorityPublicKey != null}"
+                            th:if="${!#strings.isEmpty(certAuthorityPublicKey)}"
                             data-copy-from="cert-authority-public-key">Copy</button>
-                    <a class="btn btn-secondary" th:if="${certAuthorityPublicKey != null}"
+                    <a class="btn btn-secondary" th:if="${!#strings.isEmpty(certAuthorityPublicKey)}"
                        th:href="'downloadCertAuthority.ktrl?_csrf=' + ${session._csrf}">Download</a>
                 </span>
             </div>
-            <p th:if="${certAuthorityPublicKey == null}" class="error">
+            <p th:if="${#strings.isEmpty(certAuthorityPublicKey)}" class="error">
                 No certificate authority has been generated. One is created at startup &mdash;
                 check the server log for errors.
             </p>
-            <template th:if="${certAuthorityPublicKey != null}" th:remove="tag">
+            <template th:if="${!#strings.isEmpty(certAuthorityPublicKey)}" th:remove="tag">
                 <pre class="settings-key" id="cert-authority-public-key"
                      th:text="${certAuthorityPublicKey}"></pre>
                 <p>On each managed system, as root:</p>
@@ -164,7 +164,7 @@ systemctl reload sshd</pre>
         </section>
 
         <details class="settings-card settings-danger"
-                 th:open="${importPrivateKey != null or importPublicKey != null}">
+                 th:open="${!#strings.isEmpty(importPrivateKey) or !#strings.isEmpty(importPublicKey)}">
             <summary>
                 <span>
                     <span class="settings-danger-label">Advanced</span>

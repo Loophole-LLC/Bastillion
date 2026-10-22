@@ -15,6 +15,7 @@ import java.sql.Types;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -134,6 +135,138 @@ class PublicKeyDBTest {
             List<String> keys = PublicKeyDB.getPublicKeysForSystem(con, null);
 
             assertEquals(1, keys.size());
+        }
+    }
+
+    private static String realKey() throws Exception {
+        com.jcraft.jsch.KeyPair kp = com.jcraft.jsch.KeyPair.genKeyPair(new com.jcraft.jsch.JSch(), com.jcraft.jsch.KeyPair.ED25519);
+        return "ssh-ed25519 " + java.util.Base64.getEncoder().encodeToString(kp.getPublicKeyBlob()) + " alice@laptop";
+    }
+
+    private long insertRealKey(Connection con, long userId, Long profileId, String publicKey) throws SQLException {
+        try (PreparedStatement stmt = con.prepareStatement(
+                "insert into public_keys(key_nm, public_key, fingerprint, user_id, profile_id) values ('k', ?, ?, ?, ?)",
+                java.sql.Statement.RETURN_GENERATED_KEYS)) {
+            stmt.setString(1, publicKey);
+            stmt.setString(2, publicKey == null ? null : io.bastillion.manage.util.OpenSSHKeyUtil.getFingerprint(publicKey));
+            stmt.setLong(3, userId);
+            if (profileId == null) {
+                stmt.setNull(4, Types.NULL);
+            } else {
+                stmt.setLong(4, profileId);
+            }
+            stmt.execute();
+            var rs = stmt.getGeneratedKeys();
+            rs.next();
+            return rs.getLong(1);
+        }
+    }
+
+    private static io.bastillion.manage.model.PublicKey key(Long id, Long profileId, String publicKey) {
+        io.bastillion.manage.model.PublicKey key = new io.bastillion.manage.model.PublicKey();
+        key.setId(id);
+        key.setPublicKey(publicKey);
+        if (profileId != null) {
+            io.bastillion.manage.model.Profile profile = new io.bastillion.manage.model.Profile();
+            profile.setId(profileId);
+            key.setProfile(profile);
+        }
+        return key;
+    }
+
+    @Test
+    void aNewKeyIsADuplicateOfTheSameKeyUnderTheSameProfileOrUnderNone() throws Exception {
+        // "profile_id = ? and id <> ?" with nulls bound matched nothing, so a new key - no id
+        // yet - was never a duplicate, and neither was any key registered for all systems
+        try (Connection con = DbTestSupport.newConnection()) {
+            long userId = insertUser(con, "alice");
+            long profileId = insertProfile(con, "prod");
+            String pub = realKey();
+            insertRealKey(con, userId, profileId, pub);
+            insertRealKey(con, userId, null, pub);
+
+            assertTrue(PublicKeyDB.isKeyRegistered(con, userId, key(null, profileId, pub)));
+            assertTrue(PublicKeyDB.isKeyRegistered(con, userId, key(null, null, pub)));
+        }
+    }
+
+    @Test
+    void theSameKeyUnderAnotherProfileOrAnotherUserIsNotADuplicate() throws Exception {
+        try (Connection con = DbTestSupport.newConnection()) {
+            long alice = insertUser(con, "alice");
+            long bob = insertUser(con, "bob");
+            long prod = insertProfile(con, "prod");
+            long staging = insertProfile(con, "staging");
+            String pub = realKey();
+            insertRealKey(con, alice, prod, pub);
+
+            assertFalse(PublicKeyDB.isKeyRegistered(con, alice, key(null, staging, pub)));
+            assertFalse(PublicKeyDB.isKeyRegistered(con, alice, key(null, null, pub)));
+            assertFalse(PublicKeyDB.isKeyRegistered(con, bob, key(null, prod, pub)));
+        }
+    }
+
+    @Test
+    void editingAKeyDoesNotMakeItADuplicateOfItself() throws Exception {
+        try (Connection con = DbTestSupport.newConnection()) {
+            long userId = insertUser(con, "alice");
+            long profileId = insertProfile(con, "prod");
+            String pub = realKey();
+            long id = insertRealKey(con, userId, profileId, pub);
+
+            assertFalse(PublicKeyDB.isKeyRegistered(con, userId, key(id, profileId, pub)));
+        }
+    }
+
+    @Test
+    void disablingAKeyTakesEveryRecordOfItOffEverySystemAndEnablingPutsThemBack() throws Exception {
+        // the confirmation promises the key "is removed from every system" - disabling only the
+        // record clicked left any other record of the same key pushing it to its systems
+        try (Connection con = DbTestSupport.newConnection()) {
+            long alice = insertUser(con, "alice");
+            long bob = insertUser(con, "bob");
+            long prod = insertProfile(con, "prod");
+            long staging = insertProfile(con, "staging");
+            long prodSystem = insertSystem(con, "prod-1");
+            long stagingSystem = insertSystem(con, "staging-1");
+            mapSystemToProfile(con, prod, prodSystem);
+            mapSystemToProfile(con, staging, stagingSystem);
+            String pub = realKey();
+            String other = realKey();
+            long clicked = insertRealKey(con, alice, prod, pub);
+            insertRealKey(con, alice, staging, pub);
+            insertRealKey(con, bob, null, pub);
+            insertRealKey(con, bob, null, other);
+
+            PublicKeyDB.disableKey(con, clicked);
+
+            assertEquals(List.of(other), PublicKeyDB.getPublicKeysForSystem(con, prodSystem));
+            assertEquals(List.of(other), PublicKeyDB.getPublicKeysForSystem(con, stagingSystem));
+            assertTrue(PublicKeyDB.isKeyDisabled(con, io.bastillion.manage.util.OpenSSHKeyUtil.getFingerprint(pub)));
+
+            PublicKeyDB.enableKey(con, clicked);
+
+            assertEquals(3, PublicKeyDB.getPublicKeysForSystem(con, prodSystem).size());
+            assertEquals(3, PublicKeyDB.getPublicKeysForSystem(con, stagingSystem).size());
+        }
+    }
+
+    @Test
+    void disablingAnOlderRecordWithNoFingerprintStillDisablesItAndNothingElse() throws Exception {
+        try (Connection con = DbTestSupport.newConnection()) {
+            long userId = insertUser(con, "alice");
+            long systemId = insertSystem(con, "web-1");
+            long legacy = insertRealKey(con, userId, null, null);
+            String other = realKey();
+            insertRealKey(con, userId, null, other);
+            try (PreparedStatement stmt = con.prepareStatement("update public_keys set public_key='ssh-ed25519 AAAA legacy' where id=?")) {
+                stmt.setLong(1, legacy);
+                stmt.execute();
+            }
+
+            PublicKeyDB.disableKey(con, legacy);
+
+            assertEquals(List.of(other), PublicKeyDB.getPublicKeysForSystem(con, systemId));
         }
     }
 

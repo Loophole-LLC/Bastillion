@@ -99,7 +99,7 @@
         <input type="hidden" id="viewSystems_sortedSet_orderByField" name="sortedSet.orderByField"
                th:value="${sortedSet.orderByField}">
         <h3>Manage Systems</h3>
-        <div th:if="${certTestMessage != null}" class="alert"
+        <div th:if="${!#strings.isEmpty(certTestMessage)}" class="alert"
              th:classappend="${certTestOk} ? 'alert-success' : 'alert-danger'">
             <strong th:text="${certTestOk} ? 'Certificate accepted' : 'Certificate not accepted'"></strong>
             <span th:text="${certTestMessage}"></span>

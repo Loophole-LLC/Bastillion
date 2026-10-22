@@ -26,6 +26,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.security.GeneralSecurityException;
 import java.sql.SQLException;
+import java.util.List;
 
 /**
  * Action to manage users
@@ -148,6 +149,16 @@ public class UsersKtrl extends BaseKontroller {
                 || user.getFirstNm() == null
                 || user.getFirstNm().trim().equals("")) {
             addFieldError("user.firstNm", REQUIRED);
+        }
+
+        // Stored as given otherwise, and every check of either compares against one of these
+        // exactly - a user of any other type got neither manager nor administrator access yet
+        // was listed as "Full Access", and was missing from every profile's user list.
+        if (user != null && !Auth.ADMINISTRATOR.equals(user.getUserType()) && !Auth.MANAGER.equals(user.getUserType())) {
+            addFieldError("user.userType", "Invalid");
+        }
+        if (user != null && !List.of(Auth.AUTH_BASIC, Auth.AUTH_EXTERNAL, Auth.AUTH_SAML).contains(user.getAuthType())) {
+            addFieldError("user.authType", "Invalid");
         }
 
         if (user != null && user.getPassword() != null && !user.getPassword().trim().equals("")) {

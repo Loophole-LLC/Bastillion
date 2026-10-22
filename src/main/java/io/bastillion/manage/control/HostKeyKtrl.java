@@ -101,7 +101,7 @@ public class HostKeyKtrl extends BaseKontroller {
                 return reloadView();
             }
             String fingerprint = OpenSSHKeyUtil.getFingerprint(publicKey.trim());
-            if (StringUtils.isBlank(fingerprint)) {
+            if (!OpenSSHKeyUtil.isWellFormedPublicKey(publicKey) || StringUtils.isBlank(fingerprint)) {
                 addError("That does not look like an SSH public key");
                 return reloadView();
             }

@@ -4,6 +4,46 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [6.0.3]
+
+### Changed
+
+- **An LDAP or SAML outage no longer looks like a wrong password.** Every failure of the external login - a directory that could not be reached, a `jaas.conf` naming a module that does not exist, an error while signing the user in - used to come back as "Login credentials are invalid", which is how LDAP login stayed broken unnoticed until 6.0.2. Now only a directory or IdP that actually rejects the credentials says so. When the directory cannot be reached, the login page says "The directory could not be reached. Please try again later or contact an administrator", the error log says why, and those attempts do not count against the client's login throttle. SAML redirects back with `ssoError=unavailable` and shows "Single sign-on is unavailable" when its settings cannot be loaded; a malformed SAML response still counts as an invalid login.
+- **Local accounts still sign in while the directory is down.** A break-glass local account (such as a Manager kept for that purpose) keeps working during a directory outage; the outage is only reported once no local account matches.
+- A database error while signing in an LDAP or SAML user is now reported as an error rather than as invalid credentials.
+
+### Security
+
+- **Controllers accept only the request parameters their forms send.** Every field of every model object used to be settable by name, along with each controller's own internal state, so a form posting `user.firstNm` equally accepted `user.authToken`, and `?errors=` or `?AUTH_ERROR=` could put text of the requester's choosing on a page. Each controller now lists the parameters it accepts, and anything else is ignored. No exploitable case was found; this closes off the class of bug that let `?publicKey=` replace the key shown on the Settings page, rather than fixing a specific new one. If you have customised the web UI with extra form fields, they need adding to the controller's `@Model(params = ...)` list.
+- **Disabling a key now takes it off every system.** The confirmation says a disabled key "is removed from every system", but only the record clicked was disabled. Any other record of the same key - registered under another profile, for all systems, or by another user - stayed enabled and kept the key in those hosts' `authorized_keys`. Disabling and enabling now apply to every record with that key's fingerprint, and every system is refreshed.
+- **A key can no longer be registered twice in the same place.** The check for "already registered under the selected profile" never matched a new key, nor any key for all systems, so the same key could be added again - and, with the problem above, survive being disabled.
+- **Pasted public keys must be a plain key.** Anything containing `ssh-` was accepted: `ssh-ed25519 x`, a key labelled with the wrong type, or a key with `authorized_keys` options such as `command="..."` in front, which were stored and pushed to hosts exactly as typed. A key must now be `<type> <base64 key> [comment]`, with the key matching its type. Keys already saved are unaffected. The same check applies to host certificate authorities.
+
+### Added
+
+- **A startup warning when LDAP cannot work.** If `jaasModule` is set but `jaas.conf` cannot be read, has no entry by that name, or names a login module that does not exist, Bastillion prints "WARNING: LDAP login will fail: …" to the console and the error log.
+
+### Fixed
+
+- **Terminal colors and color themes are saved again.** Since 6.0.0, choosing them under Settings appeared to save but stored nothing, so terminals kept the default colors.
+- **Opening a terminal prompts for a password or key passphrase again.** Since 4.0.0, connecting to a host that needed a password (the application key not yet installed) or an application key passphrase showed a bare "Failed" error instead of the prompt the terminal screen asks for. Both prompts now appear, and registering a system shows "Passphrase" rather than "Failed" when the application key's passphrase is missing or wrong.
+- **Two key refreshes reaching one host at once could delete its `authorized_keys`.** Since 6.0.0, writes stage the new file and rename it into place, but every write used the same staged name, so one could rename another's file away and then remove the original with nothing to replace it - leaving the host with no `authorized_keys` at all, Bastillion's own key included, until it was fixed by hand. Disabling a key, assigning a profile and the refresh timer each start their own refresh, so this needed nothing unusual. Each write now has its own staged file, writes to the same file run one at a time, and the original is only removed once its replacement is known to exist.
+- The Manage Systems page showed a red "Certificate not accepted" banner on every visit since 6.0.0, without any certificate test having been run. It now appears only after one.
+- The "Replace application SSH key" section of Settings opened expanded on every visit; it now starts collapsed. A missing certificate authority now shows its explanation instead of an empty key.
+- Adding a user accepted any user type or authentication type. A type other than "Administrative Only" or "Full Access" gave the user no access at all while the user list showed "Full Access"; both are now validated.
+- Downloading a generated private key without its name returned an error page; it now returns nothing.
+- The application public key and certificate authority key on the Settings page were read from the database once, shortly after startup, so a failure at that moment left them blank until a restart. They are now read on every request.
+
+### Internal
+
+- `@Model(params = {...})` lists the request parameters a controller field accepts; a field without it is output only. The names are checked at startup, and a test fails the build if a template sends a parameter no controller accepts.
+- SSH connections are now tested end to end against an in-process SSH/SFTP server (Apache MINA SSHD, test scope only): password and key login, installing the application key over SFTP, host key trust and refusal, terminal output, certificate tests, and how each failure is reported.
+- Startup (`DBInitServlet`) is split into named steps, unchanged in order and output, and no longer leaks its database connection if a step fails.
+- Line endings are LF throughout, pinned by `.gitattributes`; `.git-blame-ignore-revs` lets blame skip the conversion commit.
+- OpenSSH key encoding moves from `SSHUtil` to `OpenSSHKeyUtil`, and `authorized_keys` handling to `AuthorizedKeysUtil`, unchanged. Log lines from that code now appear under those class names.
+
+**Upgrade note:** no config or schema changes. If you use LDAP, check the console after upgrading for a "LDAP login will fail" warning, which means `jaas.conf` needs fixing before directory users can sign in.
+
 ## [6.0.2]
 
 ### Fixed

@@ -135,6 +135,20 @@ class AuthKeysKtrlTest {
         verify(session).removeAttribute(PVT_KEY_SESSION_ATTR);
     }
 
+    @Test
+    void downloadPvtKeyWithNoKeyNameWritesNothingRatherThanFailing() throws Exception {
+        // no publicKey.* parameter, so nothing bound - this was a NullPointerException and a 500
+        AuthKeysKtrl ktrl = newController();
+        when(session.getAttribute(PVT_KEY_SESSION_ATTR))
+                .thenReturn(EncryptionUtil.encrypt("-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----"));
+        setField(ktrl, "publicKey", null);
+
+        assertNull(ktrl.downloadPvtKey());
+
+        verify(response, never()).getOutputStream();
+        verify(session).removeAttribute(PVT_KEY_SESSION_ATTR);
+    }
+
     // ---- savePublicKeys: profile-ownership authorization boundary -------------------------
 
     @Test
