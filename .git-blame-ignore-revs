@@ -1,0 +1,5 @@
+# Commits that change formatting only, skipped by `git blame` (GitHub reads this file
+# automatically; locally: git config blame.ignoreRevsFile .git-blame-ignore-revs).
+
+# Normalize line endings to LF and pin them with .gitattributes
+53e68f4f04cd3e9b3030900d244101af9db53f53
