@@ -51,10 +51,10 @@ public class LoginKtrl extends BaseKontroller {
     // object when a request parameter names it, so POSTing /loginSubmit.ktrl with no auth.*
     // parameters at all left this null and the NPE in validateLoginSubmit surfaced as an
     // unauthenticated HTTP 500. Validation now reports the missing fields instead.
-    @Model(name = "auth")
+    @Model(name = "auth", params = {"auth.username", "auth.password", "auth.otpToken"})
     Auth auth = new Auth();
-    //bound from the ?ssoError= query param SamlAcsServlet redirects failures to - see
-    //loophole.mvc.base.BaseKontroller's generic request-param field binding
+    //bound from the ?ssoError= query param SamlAcsServlet redirects failures to
+    @Model(name = "ssoError", params = {"ssoError"})
     String ssoError;
 
 

@@ -17,9 +17,19 @@ public @interface Model {
     String name();
 
     /**
-     * false for a value the controller sets for the view and a request must never supply -
-     * the request binder skips the field, as it skips every static field
+     * The request parameters this field accepts, each by the full name a form or link sends:
+     * {@code "password"} for a scalar or list field, {@code "user.firstNm"} for one property
+     * of a model object, {@code "sortedSet.filterMap"} for every key of a map
+     * ({@code sortedSet.filterMap['profile']}).
+     * <p>
+     * Empty - the default - makes the field output only: the controller sets it for the view
+     * and no request parameter is ever bound into it. Binding used to be the default, with
+     * every field of every model object reachable by name, so a form posting
+     * {@code user.firstNm} equally accepted {@code user.userType} or {@code user.authToken},
+     * and output such as the Settings page's public key could be replaced from the query
+     * string. Listing each parameter keeps what a request can set down to what the forms
+     * actually send.
      */
-    boolean bindable() default true;
+    String[] params() default {};
 }
 

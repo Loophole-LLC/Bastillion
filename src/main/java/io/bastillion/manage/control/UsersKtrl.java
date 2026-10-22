@@ -35,11 +35,20 @@ public class UsersKtrl extends BaseKontroller {
     private static final Logger log = LoggerFactory.getLogger(UsersKtrl.class);
     public static final String REQUIRED = "Required";
 
-    @Model(name = "sortedSet")
+    @Model(name = "sortedSet", params = {"sortedSet.orderByField", "sortedSet.orderByDirection"})
     SortedSet sortedSet = new SortedSet();
-    @Model(name = "user")
+    @Model(name = "user", params = {
+            "user.id",
+            "user.username",
+            "user.firstNm",
+            "user.lastNm",
+            "user.email",
+            "user.userType",
+            "user.authType",
+            "user.password",
+            "user.passwordConfirm"})
     User user = new User();
-    @Model(name = "resetSharedSecret")
+    @Model(name = "resetSharedSecret", params = {"resetSharedSecret"})
     Boolean resetSharedSecret = false;
     @Model(name = "userId")
     Long userId;

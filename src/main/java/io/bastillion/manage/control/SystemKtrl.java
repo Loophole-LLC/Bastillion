@@ -38,15 +38,21 @@ public class SystemKtrl extends BaseKontroller {
     private static final Logger log = LoggerFactory.getLogger(SystemKtrl.class);
 
     public static final String REQUIRED = "Required";
-    @Model(name = "sortedSet")
+    @Model(name = "sortedSet", params = {"sortedSet.orderByField", "sortedSet.orderByDirection", "sortedSet.filterMap"})
     SortedSet sortedSet = new SortedSet();
-    @Model(name = "hostSystem")
+    @Model(name = "hostSystem", params = {
+            "hostSystem.id",
+            "hostSystem.displayNm",
+            "hostSystem.user",
+            "hostSystem.host",
+            "hostSystem.port",
+            "hostSystem.authorizedKeys"})
     HostSystem hostSystem = new HostSystem();
-    @Model(name = "script")
+    @Model(name = "script", params = {"script.id"})
     Script script = null;
-    @Model(name = "password")
+    @Model(name = "password", params = {"password"})
     String password;
-    @Model(name = "passphrase")
+    @Model(name = "passphrase", params = {"passphrase"})
     String passphrase;
     @Model(name = "profileList")
     List<Profile> profileList = new ArrayList<>();

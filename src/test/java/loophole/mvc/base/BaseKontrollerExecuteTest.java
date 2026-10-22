@@ -99,6 +99,67 @@ class BaseKontrollerExecuteTest {
         verify(request).setAttribute("serverValue", "set by the controller");
     }
 
+    @Test
+    void bindsOnlyTheListedPropertiesOfAModelObject() throws Exception {
+        when(request.getServletPath()).thenReturn("/person.ktrl");
+        when(request.getMethod()).thenReturn("POST");
+        // person.role is not stubbed: the binder must not even read a parameter it does not accept
+        when(request.getParameterNames()).thenReturn(Collections.enumeration(java.util.List.of("person.name", "person.role")));
+        when(request.getParameter("person.name")).thenReturn("alice");
+
+        new BaseKontroller(request, response).execute();
+
+        assertEquals("alice", DummyController.lastPerson.getName());
+        assertEquals("user", DummyController.lastPerson.getRole());
+    }
+
+    @Test
+    void neverBindsAControllerFieldByItsBareNameOrTheFrameworksOwnState() throws Exception {
+        when(request.getServletPath()).thenReturn("/person.ktrl");
+        when(request.getMethod()).thenReturn("POST");
+        when(request.getParameterNames()).thenReturn(Collections.enumeration(
+                java.util.List.of("internalNote", "errors", "fieldErrors[name]", "request")));
+
+        String forward = new BaseKontroller(request, response).execute();
+
+        // an injected error would have skipped the action for the validation input
+        assertEquals("forward:/person.html", forward);
+        assertEquals("set by the controller", DummyController.lastInternalNote);
+        assertEquals(0, DummyController.lastErrorCount);
+    }
+
+    @Test
+    void withoutMapKeysReducesAParameterToTheNameModelParamsListsItBy() {
+        assertEquals("sortedSet.filterMap", BaseKontroller.withoutMapKeys("sortedSet.filterMap['profile']"));
+        assertEquals("tags", BaseKontroller.withoutMapKeys("tags[env"));
+        assertEquals("a.b", BaseKontroller.withoutMapKeys("a[x].b[y]"));
+        assertEquals("user.firstNm", BaseKontroller.withoutMapKeys("user.firstNm"));
+    }
+
+    static class ParamOutsideItsModel {
+        @loophole.mvc.annotation.Model(name = "user", params = {"admin.flag"})
+        DummyController.Person user;
+    }
+
+    static class ParamNamingAMissingProperty {
+        @loophole.mvc.annotation.Model(name = "person", params = {"person.nmae"})
+        DummyController.Person person;
+    }
+
+    static class StaticFieldAcceptingParams {
+        @loophole.mvc.annotation.Model(name = "shared", params = {"shared"})
+        static String shared;
+    }
+
+    @Test
+    void rejectsParamsThatCouldNeverBindAtStartupRatherThanIgnoringThem() {
+        assertThrows(IllegalStateException.class, () -> BaseKontroller.acceptedParams(ParamOutsideItsModel.class));
+        IllegalStateException typo = assertThrows(IllegalStateException.class,
+                () -> BaseKontroller.acceptedParams(ParamNamingAMissingProperty.class));
+        assertTrue(typo.getMessage().contains("nmae"), typo.getMessage());
+        assertThrows(IllegalStateException.class, () -> BaseKontroller.acceptedParams(StaticFieldAcceptingParams.class));
+    }
+
     // --- setFieldFromParams' bracketed-key parsing (tags[env]=prod -> Map.put("env", "prod")) ---
     // Regression coverage for the java/polynomial-redos fix: the key extraction used to
     // chain three replaceAll regexes (".*\\[", "\\'", "\\]. *") over the attacker-controlled

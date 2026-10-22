@@ -29,11 +29,14 @@ import java.net.JarURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Enumeration;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
@@ -73,6 +76,12 @@ public class BaseKontroller {
      */
     private static final Map<String, Route> ROUTES = new HashMap<>();
 
+    /**
+     * The request parameters each controller accepts, from its {@code @Model(params = ...)}
+     * declarations - see {@link #acceptedParams}.
+     */
+    private static final Map<Class<?>, Set<String>> ACCEPTED_PARAMS = new HashMap<>();
+
     // Load scan packages for controllers that have the Kontrol method annotation
     static {
         for (String packageNm : PACKAGES.split(",")) {
@@ -106,6 +115,7 @@ public class BaseKontroller {
      * Indexes every {@link Kontrol} method on a controller into {@link #ROUTES}.
      */
     private static void registerRoutes(Class<?> clazz) {
+        ACCEPTED_PARAMS.put(clazz, acceptedParams(clazz));
         for (Method method : clazz.getMethods()) {
             Kontrol kontrol = method.getAnnotation(Kontrol.class);
             if (kontrol == null) {
@@ -247,11 +257,16 @@ public class BaseKontroller {
 
             bindModelsFromRequestAttributes(route.controller(), ctrl);
 
-            // set parameters
+            // set parameters - only those the controller declares, see Model#params
+            Set<String> accepted = ACCEPTED_PARAMS.getOrDefault(route.controller(), Set.of());
             Enumeration<String> parameterNames = request.getParameterNames();
             while (parameterNames.hasMoreElements()) {
                 String param = parameterNames.nextElement();
-                setFieldFromParams(ctrl, param, request);
+                if (param != null && accepted.contains(withoutMapKeys(param))) {
+                    setFieldFromParams(ctrl, param, request);
+                } else {
+                    log.debug("Ignoring request parameter {} not accepted by {}", param, route.controller().getName());
+                }
             }
 
             String forward = null;
@@ -297,11 +312,13 @@ public class BaseKontroller {
 
     /**
      * Seeds {@code @Model} fields from request attributes already set by an earlier forward.
+     * Only fields that accept request parameters are seeded, so an output-only field always
+     * holds what its own controller put there.
      */
     private void bindModelsFromRequestAttributes(Class<?> clazz, BaseKontroller ctrl) throws IllegalAccessException {
         for (Field field : clazz.getDeclaredFields()) {
             Model model = field.getAnnotation(Model.class);
-            if (model == null || model.name().isEmpty() || isNotBindable(field)) {
+            if (model == null || model.name().isEmpty() || model.params().length == 0 || isStatic(field)) {
                 continue;
             }
             Object attribute = request.getAttribute(model.name());
@@ -336,23 +353,87 @@ public class BaseKontroller {
         }
     }
 
+    private static boolean isStatic(Field field) {
+        return Modifier.isStatic(field.getModifiers());
+    }
+
     /**
-     * True for a field that request parameters must never be bound into.
+     * Every request parameter name a controller accepts, from the {@code params} of its
+     * {@code @Model} fields, checked so that a mistake fails at startup rather than quietly
+     * never binding.
      * <p>
-     * A static field is shared by every request and every user, so binding a parameter into
-     * one is a cross-user write: {@code ?publicKey=...} against a controller holding its
-     * application public key in a static {@code @Model} field would have replaced the value
-     * rendered for everybody, and {@code ?someMap['k']=v} would have grown a shared map
-     * without bound. A static final field is worse only in that {@code Field.set} refuses it
-     * outright, turning any request that happened to name one into a 500.
+     * Each name must begin with its own model's name and resolve, one dotted segment at a
+     * time, to a real field - a typo in a property name would otherwise just leave a form
+     * field silently ignored. A static field may not accept anything: it is shared by every
+     * request and every user, so binding into one is a cross-user write
+     * ({@code ?publicKey=...} against a static {@code @Model} would have replaced the value
+     * rendered for everybody), and {@code Field.set} refuses a static final one outright.
      * <p>
-     * A field marked {@code @Model(bindable = false)} is output only: the controller sets it
-     * for the view, so a parameter naming it could only put a value of the requester's
-     * choosing on the page.
+     * Package-private so a test can run the same checks over the application's controllers,
+     * which the test JVM does not scan.
      */
-    private static boolean isNotBindable(Field field) {
-        Model model = field.getAnnotation(Model.class);
-        return Modifier.isStatic(field.getModifiers()) || (model != null && !model.bindable());
+    static Set<String> acceptedParams(Class<?> controller) {
+        Set<String> accepted = new HashSet<>();
+        for (Field field : getAllFields(controller)) {
+            Model model = field.getAnnotation(Model.class);
+            if (model == null || model.params().length == 0) {
+                continue;
+            }
+            if (isStatic(field)) {
+                throw new IllegalStateException(controller.getName() + "." + field.getName()
+                        + " is static and cannot accept request parameters");
+            }
+            for (String param : model.params()) {
+                if (!param.equals(model.name()) && !param.startsWith(model.name() + ".")) {
+                    throw new IllegalStateException(controller.getName() + "." + field.getName()
+                            + " accepts '" + param + "', which is not under its model name '" + model.name() + "'");
+                }
+                Class<?> type = field.getType();
+                String[] segments = param.split("\\.");
+                for (int i = 1; i < segments.length; i++) {
+                    Field property = findField(type, segments[i]);
+                    if (property == null || isStatic(property)) {
+                        throw new IllegalStateException(controller.getName() + "." + field.getName()
+                                + " accepts '" + param + "', but " + type.getSimpleName()
+                                + " has no field '" + segments[i] + "'");
+                    }
+                    type = property.getType();
+                }
+                accepted.add(param);
+            }
+        }
+        return Collections.unmodifiableSet(accepted);
+    }
+
+    private static Field findField(Class<?> type, String name) {
+        for (Field field : getAllFields(type)) {
+            if (field.getName().equals(name)) {
+                return field;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * A parameter name with its map keys removed, the form {@link Model#params} lists it in:
+     * {@code sortedSet.filterMap['profile']} becomes {@code sortedSet.filterMap}. An
+     * unclosed bracket runs to the end of the name, as the binder reads it. A plain scan
+     * rather than a regex, since the name is attacker-controlled.
+     */
+    static String withoutMapKeys(String param) {
+        StringBuilder sb = new StringBuilder(param.length());
+        boolean inKey = false;
+        for (int i = 0; i < param.length(); i++) {
+            char c = param.charAt(i);
+            if (inKey) {
+                inKey = c != ']';
+            } else if (c == '[') {
+                inKey = true;
+            } else {
+                sb.append(c);
+            }
+        }
+        return sb.toString();
     }
 
     private void setFieldFromParams(Object ctrl, String param, HttpServletRequest request)
@@ -363,12 +444,19 @@ public class BaseKontroller {
         }
 
         Map<String, String> requestMap = new HashMap<>();
+        boolean topLevel = true;
         for (String name : param.split("\\.")) {
             for (Field field : getAllFields(ctrl.getClass())) {
-                if (isNotBindable(field)) {
+                if (isStatic(field)) {
                     continue;
                 }
                 Model v = field.getAnnotation(Model.class);
+                // the controller's own fields bind only through a @Model that accepts
+                // parameters - never by bare field name, which reached BaseKontroller's
+                // errors and fieldErrors and every unannotated field of a controller
+                if (topLevel && (v == null || v.params().length == 0)) {
+                    continue;
+                }
 
                 String key = null;
                 if (name.contains("[")) {
@@ -391,6 +479,7 @@ public class BaseKontroller {
                     ctrl = field.get(ctrl);
                 }
             }
+            topLevel = false;
         }
     }
 

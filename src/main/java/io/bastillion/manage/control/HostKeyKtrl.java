@@ -42,9 +42,9 @@ public class HostKeyKtrl extends BaseKontroller {
     private static final Logger hostKeyAuditLogger =
             LoggerFactory.getLogger("io.bastillion.manage.control.LoginAudit");
 
-    @Model(name = "sortedSet")
+    @Model(name = "sortedSet", params = {"sortedSet.orderByField", "sortedSet.orderByDirection"})
     SortedSet sortedSet = new SortedSet();
-    @Model(name = "hostKey")
+    @Model(name = "hostKey", params = {"hostKey.id"})
     KnownHostKey hostKey = new KnownHostKey();
     // static so the request binder cannot set it: BaseKontroller skips static fields, and as
     // an instance field a crafted link could pass hostKeyVerificationEnabled=true and suppress
@@ -54,7 +54,10 @@ public class HostKeyKtrl extends BaseKontroller {
 
     @Model(name = "hostCertAuthorityList")
     List<HostCertAuthority> hostCertAuthorityList = new ArrayList<>();
-    @Model(name = "hostCertAuthority")
+    @Model(name = "hostCertAuthority", params = {
+            "hostCertAuthority.id",
+            "hostCertAuthority.comment",
+            "hostCertAuthority.publicKey"})
     HostCertAuthority hostCertAuthority = new HostCertAuthority();
 
 

@@ -73,14 +73,14 @@ public class UserSettingsKtrl extends BaseKontroller {
     // manager replacing it through importAppKeySubmit() changes what everyone is shown. It
     // must never be settable from a request parameter - the page tells users to install this
     // key in authorized_keys, so a link that could set it could have a user authorize a key
-    // of the attacker's choosing - hence bindable = false.
-    @Model(name = "publicKey", bindable = false)
+    // of the attacker's choosing - hence no params: output only.
+    @Model(name = "publicKey")
     String publicKey;
 
     // Shown next to the application public key because they answer the same question - what
     // Bastillion presents to a host. (Manage -> Host Keys covers the opposite direction: what
     // hosts present to us.) Output only, like publicKey above.
-    @Model(name = "certAuthorityPublicKey", bindable = false)
+    @Model(name = "certAuthorityPublicKey")
     String certAuthorityPublicKey;
 
     @Model(name = "certificateAuthEnabled")
@@ -90,17 +90,17 @@ public class UserSettingsKtrl extends BaseKontroller {
     // object when a request parameter names it, so POSTing passwordSubmit.ktrl or
     // themeSubmit.ktrl with no auth.* / userSettings.* parameters at all left these null and
     // the resulting NPE surfaced as an HTTP 500. Validation now reports the missing fields.
-    @Model(name = "auth")
+    @Model(name = "auth", params = {"auth.password", "auth.passwordConfirm", "auth.prevPassword"})
     Auth auth = new Auth();
-    @Model(name = "userSettings")
+    @Model(name = "userSettings", params = {"userSettings.plane", "userSettings.theme", "userSettings.uiTheme"})
     UserSettings userSettings = new UserSettings();
-    @Model(name = "importPrivateKey")
+    @Model(name = "importPrivateKey", params = {"importPrivateKey"})
     String importPrivateKey;
-    @Model(name = "importPublicKey")
+    @Model(name = "importPublicKey", params = {"importPublicKey"})
     String importPublicKey;
-    @Model(name = "importPassphrase")
+    @Model(name = "importPassphrase", params = {"importPassphrase"})
     String importPassphrase;
-    @Model(name = "importConfirmReplace")
+    @Model(name = "importConfirmReplace", params = {"importConfirmReplace"})
     Boolean importConfirmReplace;
     @Model(name = "systemCount")
     Integer systemCount;
@@ -166,9 +166,14 @@ public class UserSettingsKtrl extends BaseKontroller {
 
     @Kontrol(path = "/admin/themeSubmit", method = MethodType.POST)
     public String themeSubmit() throws ServletException {
-        // setTheme(getTheme()), setPlane(getPlane()) and setUiTheme(getUiTheme()) used to be
-        // called here. Each assigned a field to itself; the values are already bound from the
-        // request by the time this runs.
+        // Not self-assignments: the request binder writes fields directly and never calls
+        // setters, and these setters are what turn the submitted values into what is saved -
+        // setPlane splits "bg,fg" into the bg and fg columns, setTheme splits the 16 colors,
+        // and setUiTheme reduces anything but "light" to "dark". Removing them in 6.0.0
+        // meant terminal colors and color themes were saved as nothing.
+        userSettings.setPlane(userSettings.getPlane());
+        userSettings.setTheme(userSettings.getTheme());
+        userSettings.setUiTheme(userSettings.getUiTheme());
         try {
             UserThemeDB.saveTheme(AuthUtil.getUserId(getRequest().getSession()), userSettings);
             ThemeUtil.setThemeCookie(getRequest(), getResponse(), userSettings.getUiTheme());

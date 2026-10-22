@@ -38,11 +38,11 @@ public class SessionAuditKtrl extends BaseKontroller {
 
     private static final Logger log = LoggerFactory.getLogger(SessionAuditKtrl.class);
 
-    @Model(name = "sortedSet")
+    @Model(name = "sortedSet", params = {"sortedSet.orderByField", "sortedSet.orderByDirection", "sortedSet.filterMap"})
     SortedSet sortedSet = new SortedSet();
-    @Model(name = "sessionId")
+    @Model(name = "sessionId", params = {"sessionId"})
     Long sessionId;
-    @Model(name = "instanceId")
+    @Model(name = "instanceId", params = {"instanceId"})
     Integer instanceId;
     @Model(name = "sessionAudit")
     SessionAudit sessionAudit;

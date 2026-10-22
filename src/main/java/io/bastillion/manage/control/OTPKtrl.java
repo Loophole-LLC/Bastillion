@@ -46,9 +46,9 @@ public class OTPKtrl extends BaseKontroller {
     private static final int QR_IMAGE_WIDTH = 325;
     private static final int QR_IMAGE_HEIGHT = 325;
 
-    @Model(name = "qrImage")
+    @Model(name = "qrImage", params = {"qrImage"})
     String qrImage;
-    @Model(name = "sharedSecret")
+    @Model(name = "sharedSecret", params = {"sharedSecret"})
     String sharedSecret;
 
     public OTPKtrl(HttpServletRequest request, HttpServletResponse response) {

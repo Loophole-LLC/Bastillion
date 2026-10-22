@@ -58,10 +58,17 @@ public class AuthKeysKtrl extends BaseKontroller {
     @Model(name = "userList")
     List<User> userList = new ArrayList<>();
 
-    @Model(name = "publicKey")
+    @Model(name = "publicKey", params = {
+            "publicKey.id",
+            "publicKey.keyNm",
+            "publicKey.keyType",
+            "publicKey.publicKey",
+            "publicKey.passphrase",
+            "publicKey.passphraseConfirm",
+            "publicKey.profile.id"})
     PublicKey publicKey;
 
-    @Model(name = "sortedSet")
+    @Model(name = "sortedSet", params = {"sortedSet.orderByField", "sortedSet.orderByDirection", "sortedSet.filterMap"})
     SortedSet sortedSet = new SortedSet();
 
     @Model(name = "forceUserKeyGenEnabled")
@@ -76,7 +83,7 @@ public class AuthKeysKtrl extends BaseKontroller {
     @Model(name = "userPublicKeyList")
     List<PublicKey> userPublicKeyList = new ArrayList<>();
 
-    @Model(name = "existingKeyId")
+    @Model(name = "existingKeyId", params = {"existingKeyId"})
     Long existingKeyId;
 
     /**

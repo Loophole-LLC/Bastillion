@@ -51,25 +51,29 @@ public class SecureShellKtrl extends BaseKontroller {
 
     static Map<Long, UserSchSessions> userSchSessionMap = new ConcurrentHashMap<>();
 
-    @Model(name = "systemSelectId")
+    @Model(name = "systemSelectId", params = {"systemSelectId"})
     List<Long> systemSelectId = new ArrayList<>();
     @Model(name = "currentSystemStatus")
     HostSystem currentSystemStatus;
-    @Model(name = "pendingSystemStatus")
+    @Model(name = "pendingSystemStatus", params = {"pendingSystemStatus.id"})
     HostSystem pendingSystemStatus;
-    @Model(name = "password")
+    @Model(name = "password", params = {"password"})
     String password;
-    @Model(name = "passphrase")
+    @Model(name = "passphrase", params = {"passphrase"})
     String passphrase;
-    @Model(name = "id")
+    @Model(name = "id", params = {"id"})
     Integer id;
     @Model(name = "systemList")
     List<HostSystem> systemList = new ArrayList<>();
     @Model(name = "allocatedSystemList")
     List<HostSystem> allocatedSystemList = new ArrayList<>();
-    @Model(name = "userSettings")
+    @Model(name = "userSettings", params = {
+            "userSettings.ptyColumns",
+            "userSettings.ptyRows",
+            "userSettings.ptyWidth",
+            "userSettings.ptyHeight"})
     UserSettings userSettings;
-    @Model(name = "script")
+    @Model(name = "script", params = {"script.id"})
     Script script = new Script();
 
 

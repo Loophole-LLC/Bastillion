@@ -30,9 +30,9 @@ public class ProfileKtrl extends BaseKontroller {
 
     private static final Logger log = LoggerFactory.getLogger(ProfileKtrl.class);
 
-    @Model(name = "sortedSet")
+    @Model(name = "sortedSet", params = {"sortedSet.orderByField", "sortedSet.orderByDirection", "sortedSet.filterMap"})
     SortedSet sortedSet = new SortedSet();
-    @Model(name = "profile")
+    @Model(name = "profile", params = {"profile.id", "profile.nm", "profile.desc"})
     Profile profile = new Profile();
 
     public ProfileKtrl(HttpServletRequest request, HttpServletResponse response) {

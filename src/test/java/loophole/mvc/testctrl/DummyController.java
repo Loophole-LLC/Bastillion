@@ -24,20 +24,26 @@ public class DummyController extends BaseKontroller {
     public static boolean submitExecuted;
     public static boolean validateSubmitExecuted;
 
-    @Model(name = "name")
+    @Model(name = "name", params = {"name"})
     private String name;
 
-    @Model(name = "age")
+    @Model(name = "age", params = {"age"})
     private Integer age;
 
     @Model(name = "greeting")
     private String greeting;
 
-    @Model(name = "tags")
+    @Model(name = "tags", params = {"tags"})
     private java.util.Map<String, String> tags = new java.util.HashMap<>();
 
-    @Model(name = "serverValue", bindable = false)
+    @Model(name = "serverValue")
     private String serverValue = "set by the controller";
+
+    @Model(name = "person", params = {"person.name"})
+    private Person person = new Person();
+
+    // not a @Model at all - must not be reachable by its field name
+    private String internalNote = "set by the controller";
 
     public static boolean tagsExecuted;
 
@@ -79,6 +85,32 @@ public class DummyController extends BaseKontroller {
     @Kontrol(path = "/serverValue", method = MethodType.POST)
     public String showServerValue() {
         return "forward:/server.html";
+    }
+
+    public static Person lastPerson;
+    public static String lastInternalNote;
+    public static int lastErrorCount;
+
+    @Kontrol(path = "/person", method = MethodType.POST)
+    public String savePerson() {
+        lastPerson = person;
+        lastInternalNote = internalNote;
+        lastErrorCount = getErrors().size() + getFieldErrors().size();
+        return "forward:/person.html";
+    }
+
+    /** a model object with one property a form may set and one it may not */
+    public static class Person {
+        private String name;
+        private String role = "user";
+
+        public String getName() {
+            return name;
+        }
+
+        public String getRole() {
+            return role;
+        }
     }
 
     @Kontrol(path = "/tags", method = MethodType.POST)

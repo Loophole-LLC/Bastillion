@@ -33,11 +33,11 @@ public class ProfileUsersKtrl extends BaseKontroller {
 
     private static final Logger log = LoggerFactory.getLogger(ProfileUsersKtrl.class);
 
-    @Model(name = "profile")
+    @Model(name = "profile", params = {"profile.id"})
     Profile profile;
-    @Model(name = "sortedSet")
+    @Model(name = "sortedSet", params = {"sortedSet.orderByField", "sortedSet.orderByDirection"})
     SortedSet sortedSet = new SortedSet();
-    @Model(name = "userSelectId")
+    @Model(name = "userSelectId", params = {"userSelectId"})
     List<Long> userSelectId = new ArrayList<>();
 
     public ProfileUsersKtrl(HttpServletRequest request, HttpServletResponse response) {

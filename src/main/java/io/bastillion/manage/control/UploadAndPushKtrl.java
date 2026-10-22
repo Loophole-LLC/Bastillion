@@ -45,15 +45,15 @@ public class UploadAndPushKtrl extends BaseKontroller {
 
     @Model(name = "upload")
     File upload;
-    @Model(name = "uploadFileName")
+    @Model(name = "uploadFileName", params = {"uploadFileName"})
     String uploadFileName;
-    @Model(name = "idList")
+    @Model(name = "idList", params = {"idList"})
     List<Long> idList = new ArrayList<>();
-    @Model(name = "pushDir")
+    @Model(name = "pushDir", params = {"pushDir"})
     String pushDir = "~";
     @Model(name = "hostSystemList")
     List<HostSystem> hostSystemList;
-    @Model(name = "pendingSystemStatus")
+    @Model(name = "pendingSystemStatus", params = {"pendingSystemStatus.id"})
     HostSystem pendingSystemStatus;
     @Model(name = "currentSystemStatus")
     HostSystem currentSystemStatus;

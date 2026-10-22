@@ -7,7 +7,9 @@ package io.bastillion.manage.control;
 
 import io.bastillion.common.util.AuthUtil;
 import io.bastillion.manage.db.SystemDB;
+import io.bastillion.manage.db.UserThemeDB;
 import io.bastillion.manage.model.Auth;
+import io.bastillion.manage.model.UserSettings;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
@@ -23,6 +25,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.when;
 
@@ -73,6 +77,39 @@ class UserSettingsKtrlTest {
         Field field = UserSettingsKtrl.class.getDeclaredField("userSettings");
         field.setAccessible(true);
         assertNotNull(field.get(ktrl));
+    }
+
+    /**
+     * The request binder writes UserSettings' fields directly, without its setters - which
+     * are what split the submitted terminal colors into the bg and fg columns that are
+     * saved. From 6.0.0 to 6.0.2 nothing re-ran them, so saved colors were empty.
+     */
+    @Test
+    void themeSubmitSavesTerminalColorsBoundStraightIntoTheirFields() throws Exception {
+        UserSettingsKtrl ktrl = new UserSettingsKtrl(request, response);
+        UserSettings bound = new UserSettings();
+        for (String[] property : new String[][]{{"plane", "#000000,#00FF00"},
+                {"theme", "#2e3436,#cc0000,#4e9a06,#c4a000,#3465a4,#75507b,#06989a,#d3d7cf,"
+                        + "#555753,#ef2929,#8ae234,#fce94f,#729fcf,#ad7fa8,#34e2e2,#eeeeec"},
+                {"uiTheme", "<not a theme>"}}) {
+            Field field = UserSettings.class.getDeclaredField(property[0]);
+            field.setAccessible(true);
+            field.set(bound, property[1]);
+        }
+        set(ktrl, "userSettings", bound);
+
+        try (MockedStatic<AuthUtil> authUtil = mockStatic(AuthUtil.class);
+             MockedStatic<UserThemeDB> themeDB = mockStatic(UserThemeDB.class)) {
+            authUtil.when(() -> AuthUtil.getUserId(any())).thenReturn(1L);
+
+            ktrl.themeSubmit();
+
+            themeDB.verify(() -> UserThemeDB.saveTheme(eq(1L), any(UserSettings.class)));
+        }
+        assertEquals("#000000", bound.getBg());
+        assertEquals("#00FF00", bound.getFg());
+        assertEquals(16, bound.getColors().length);
+        assertEquals(UserSettings.DARK, bound.getUiTheme());
     }
 
     @Test

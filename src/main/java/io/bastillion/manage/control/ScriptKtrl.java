@@ -30,9 +30,9 @@ public class ScriptKtrl extends BaseKontroller {
 
     private static final Logger log = LoggerFactory.getLogger(ScriptKtrl.class);
 
-    @Model(name = "sortedSet")
+    @Model(name = "sortedSet", params = {"sortedSet.orderByField", "sortedSet.orderByDirection"})
     SortedSet sortedSet = new SortedSet();
-    @Model(name = "script")
+    @Model(name = "script", params = {"script.id", "script.displayNm", "script.script"})
     Script script = new Script();
 
     public ScriptKtrl(HttpServletRequest request, HttpServletResponse response) {
