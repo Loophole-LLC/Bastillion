@@ -325,6 +325,54 @@ class SSHUtilIntegrationTest {
         }
     }
 
+    /**
+     * Disabling a key, assigning a profile and the refresh timer each start their own refresh
+     * thread, so two writes to one host at once is ordinary. Staged under one shared name,
+     * the loser's rename found its staged file already moved into place, fell back to
+     * removing the original - and then had nothing to rename, leaving the host with no
+     * authorized_keys at all, application key included.
+     */
+    @Test
+    void concurrentWritesToOneHostNeverLeaveItWithoutAuthorizedKeys() throws Exception {
+        int writers = 4;
+        List<com.jcraft.jsch.Session> sessions = new java.util.ArrayList<>();
+        for (int i = 0; i < writers; i++) {
+            com.jcraft.jsch.Session session = new com.jcraft.jsch.JSch().getSession(LOGIN, "127.0.0.1", sshd.getPort());
+            session.setPassword(PASSWORD);
+            session.setConfig("StrictHostKeyChecking", "no");
+            session.connect(10000);
+            sessions.add(session);
+        }
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(writers);
+        try {
+            for (int round = 0; round < 25; round++) {
+                java.util.concurrent.CyclicBarrier start = new java.util.concurrent.CyclicBarrier(writers);
+                List<java.util.concurrent.Future<?>> writes = new java.util.ArrayList<>();
+                for (int i = 0; i < writers; i++) {
+                    com.jcraft.jsch.Session session = sessions.get(i);
+                    String contents = "writer " + i + "\n" + appKey.getPublicKey() + "\n";
+                    writes.add(pool.submit(() -> {
+                        start.await();
+                        AuthorizedKeysUtil.writeAuthorizedKeys(session, ".ssh/authorized_keys", contents);
+                        return null;
+                    }));
+                }
+                for (java.util.concurrent.Future<?> write : writes) {
+                    write.get();
+                }
+
+                assertTrue(Files.exists(home.resolve(".ssh/authorized_keys")), "authorized_keys gone after round " + round);
+                assertTrue(authorizedKeys().endsWith(appKey.getPublicKey() + "\n"), authorizedKeys());
+                try (var files = Files.list(home.resolve(".ssh"))) {
+                    assertEquals(List.of(home.resolve(".ssh/authorized_keys")), files.toList());
+                }
+            }
+        } finally {
+            pool.shutdownNow();
+            sessions.forEach(com.jcraft.jsch.Session::disconnect);
+        }
+    }
+
     @Test
     void opensATerminalWhoseOutputReachesTheSessionBuffer() throws Exception {
         long sessionId = 9_100_001L;

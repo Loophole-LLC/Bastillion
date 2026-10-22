@@ -14,6 +14,7 @@ import org.slf4j.LoggerFactory;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
 /**
@@ -71,46 +72,59 @@ public class AuthorizedKeysUtil {
                 return hostSystem;
             }
 
-            String existingKeys = readAuthorizedKeys(session, authorizedKeys);
-            String appPubKey = appPublicKey.replace("\n", "").trim();
-            if (!isSafeKeyContent(appPubKey)) {
-                log.error("Refusing to push keys for system {}: application public key contains disallowed characters",
-                        hostSystem.getId());
-                hostSystem.setStatusCd(HostSystem.GENERIC_FAIL_STATUS);
-                return hostSystem;
-            }
-
-            String newKeys;
-            if (SSHUtil.keyManagementEnabled) {
-                List<String> assigned = PublicKeyDB.getPublicKeysForSystem(hostSystem.getId());
-                StringBuilder sb = new StringBuilder();
-                for (String k : assigned) {
-                    String key = k.replace("\n", "").trim();
-                    if (!isSafeKeyContent(key)) {
-                        log.error("Skipping public key for system {}: key contains disallowed characters", hostSystem.getId());
-                        continue;
-                    }
-                    sb.append(key).append("\n");
-                }
-                sb.append(appPubKey).append("\n");
-                newKeys = sb.toString();
-            } else {
-                // Key management off: leave whatever is already on the host alone and just
-                // make sure Bastillion's own key is present. existingKeys is host-controlled
-                // content that is written straight back out, which is safe only because
-                // writeAuthorizedKeys uses SFTP rather than a shell command.
-                if (!existingKeys.contains(appPubKey))
-                    newKeys = appendKeyLine(existingKeys, appPubKey);
-                else newKeys = existingKeys;
-            }
-
-            if (!newKeys.equals(existingKeys)) {
-                writeAuthorizedKeys(session, authorizedKeys, newKeys);
+            // One read-modify-write at a time per file: refreshes run on their own threads, and
+            // two interleaved here would each write what they read, so the slower one could
+            // put back a key the other had just removed.
+            synchronized (HOST_FILE_LOCKS.computeIfAbsent(hostSystem.getUser() + "@" + hostSystem.getHost()
+                    + ":" + hostSystem.getPort() + "/" + authorizedKeys, k -> new Object())) {
+                rewriteAuthorizedKeys(hostSystem, session, authorizedKeys, appPublicKey);
             }
         } catch (Exception ex) {
             log.error(ex.toString(), ex);
         }
         return hostSystem;
+    }
+
+    private static final Map<String, Object> HOST_FILE_LOCKS = new ConcurrentHashMap<>();
+
+    private static void rewriteAuthorizedKeys(HostSystem hostSystem, Session session, String authorizedKeys,
+                                              String appPublicKey) throws Exception {
+        String existingKeys = readAuthorizedKeys(session, authorizedKeys);
+        String appPubKey = appPublicKey.replace("\n", "").trim();
+        if (!isSafeKeyContent(appPubKey)) {
+            log.error("Refusing to push keys for system {}: application public key contains disallowed characters",
+                    hostSystem.getId());
+            hostSystem.setStatusCd(HostSystem.GENERIC_FAIL_STATUS);
+            return;
+        }
+
+        String newKeys;
+        if (SSHUtil.keyManagementEnabled) {
+            List<String> assigned = PublicKeyDB.getPublicKeysForSystem(hostSystem.getId());
+            StringBuilder sb = new StringBuilder();
+            for (String k : assigned) {
+                String key = k.replace("\n", "").trim();
+                if (!isSafeKeyContent(key)) {
+                    log.error("Skipping public key for system {}: key contains disallowed characters", hostSystem.getId());
+                    continue;
+                }
+                sb.append(key).append("\n");
+            }
+            sb.append(appPubKey).append("\n");
+            newKeys = sb.toString();
+        } else {
+            // Key management off: leave whatever is already on the host alone and just
+            // make sure Bastillion's own key is present. existingKeys is host-controlled
+            // content that is written straight back out, which is safe only because
+            // writeAuthorizedKeys uses SFTP rather than a shell command.
+            if (!existingKeys.contains(appPubKey))
+                newKeys = appendKeyLine(existingKeys, appPubKey);
+            else newKeys = existingKeys;
+        }
+
+        if (!newKeys.equals(existingKeys)) {
+            writeAuthorizedKeys(session, authorizedKeys, newKeys);
+        }
     }
 
     /**
@@ -159,10 +173,13 @@ public class AuthorizedKeysUtil {
     }
 
     /**
-     * Suffix for the file the new authorized_keys is staged in. Beside the real one, so the
-     * rename below stays within a single filesystem and can be atomic.
+     * Suffix for the file the new authorized_keys is staged in, followed by a name unique to
+     * the write. Beside the real one, so the rename below stays within a single filesystem
+     * and can be atomic. Unique because a shared name let one write rename another's staged
+     * file into place, leaving the other to remove the original and then find nothing to
+     * rename - a host with no authorized_keys at all.
      */
-    private static final String AUTHORIZED_KEYS_TMP_SUFFIX = ".bastillion-new";
+    private static final String AUTHORIZED_KEYS_TMP_SUFFIX = ".bastillion-new-";
 
     /**
      * Replaces the remote authorized_keys file over SFTP, via a staged write and a rename.
@@ -174,9 +191,9 @@ public class AuthorizedKeysUtil {
      * user out of that host until somebody fixes it by hand. Staging and renaming means the
      * host has either the old file or the new one.
      */
-    private static void writeAuthorizedKeys(Session session, String authorizedKeys, String contents) throws JSchException, SftpException {
+    static void writeAuthorizedKeys(Session session, String authorizedKeys, String contents) throws JSchException, SftpException {
         ChannelSftp sftp = (ChannelSftp) session.openChannel("sftp");
-        String staged = authorizedKeys + AUTHORIZED_KEYS_TMP_SUFFIX;
+        String staged = authorizedKeys + AUTHORIZED_KEYS_TMP_SUFFIX + UUID.randomUUID();
         try {
             sftp.connect(SSHUtil.CHANNEL_TIMEOUT);
             sftp.put(new ByteArrayInputStream(contents.getBytes(StandardCharsets.UTF_8)), staged);
@@ -192,7 +209,10 @@ public class AuthorizedKeysUtil {
                     // SFTP version 3 leaves renaming onto an existing path undefined and
                     // servers without the posix-rename@openssh.com extension refuse it.
                     // Removing first reopens a window where the file is missing, but a far
-                    // narrower one than streaming the whole file over the top of it.
+                    // narrower one than streaming the whole file over the top of it. Only once
+                    // the staged file is known to still be there, though: removing the
+                    // original with nothing to put in its place is the lockout itself.
+                    sftp.stat(staged);
                     log.info("Atomic rename of {} not available, falling back to replace", authorizedKeys);
                     sftp.rm(authorizedKeys);
                     originalRemoved = true;
