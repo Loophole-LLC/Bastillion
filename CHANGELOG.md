@@ -48,7 +48,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 Not released separately: these changes first shipped in 6.0.3.
 
-
 ### Fixed
 
 - **LDAP/JAAS login failed for everyone, on every release since 4.0.0.** The directory accepted the password, then `ExternalAuthUtil` threw while reading what it had returned, and the catch-all logged an error and treated it as a failed login. Two causes: it read `LoginContext`'s private fields by reflection, which Java 17+ refuses without `--add-opens`, so every JAAS module failed, including the shipped `ldap-ol` and `ldap-ad` examples; and for Jetty's `LdapLoginModule` it asked for a user `attributes` field on a class that has not had one since Jetty 10. It now uses only public JAAS and Jetty API, and runs the `jaas.conf` examples against an in-memory directory in its tests.
