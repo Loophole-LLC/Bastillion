@@ -34,16 +34,6 @@
         <exec.mainClass>io.bastillion.Main</exec.mainClass>
     </properties>
 
-    <repositories>
-        <repository>
-            <id>apache.snapshots</id>
-            <name>Apache Snapshots</name>
-            <url>https://repository.apache.org/content/repositories/snapshots/</url>
-            <releases><enabled>false</enabled></releases>
-            <snapshots><enabled>true</enabled></snapshots>
-        </repository>
-    </repositories>
-
     <!-- Pins transitive dependencies pulled in with known CVEs where the parent (here,
          jetty-jaas -> api-ldap-model) hasn't bumped its own declared version yet. -->
     <dependencyManagement>
@@ -176,8 +166,8 @@
         <!-- Commons -->
         <dependency>
             <groupId>org.apache.commons</groupId>
-            <artifactId>commons-fileupload2-jakarta</artifactId>
-            <version>2.0.0-SNAPSHOT</version>
+            <artifactId>commons-fileupload2-jakarta-servlet6</artifactId>
+            <version>2.0.0-M5</version>
         </dependency>
         <dependency>
             <groupId>commons-codec</groupId>
