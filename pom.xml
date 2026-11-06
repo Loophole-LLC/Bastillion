@@ -117,7 +117,7 @@
         <dependency>
             <groupId>com.unboundid</groupId>
             <artifactId>unboundid-ldapsdk</artifactId>
-            <version>7.0.5</version>
+            <version>7.0.6</version>
             <scope>test</scope>
         </dependency>
         <!-- in-process SSH/SFTP server for exercising SSHUtil's connections end to end -->
