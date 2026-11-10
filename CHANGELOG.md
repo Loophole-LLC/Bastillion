@@ -4,12 +4,21 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [6.0.5]
+
+### Security
+
+- **Thymeleaf 3.1.6 brings OGNL 3.4.17**, which fixes CVE-2026-113730 (GHSA-crwc-vw2r-qr6m), a bypass of OGNL's stricter-invocation block list. Bastillion does not evaluate expressions from users, so it was not exploitable here; the update clears the alert.
+
+### Dependencies
+
+- `org.thymeleaf:thymeleaf` 3.1.5 → 3.1.6 (`ognl:ognl` 3.3.4 → 3.4.17)
+
 ## [6.0.4]
 
 ### Security
 
 - **Moderate: one user could push, overwrite or delete another user's upload.** Upload & Push staged every file in one directory shared by all users, under the uploaded file's own name, and pushed whichever file the request named. A signed-in administrator who knew or guessed the name of a file another user had uploaded but not yet finished pushing could push it to a system of their own and read it, upload a file of the same name so the other user pushed their content instead (to systems outside their own profiles), or delete it. Each upload is now staged under a random name, kept in the uploader's session, and only that session can push or delete it. Found by Liam Giannini (@Liam-G).
-- **Thymeleaf 3.1.6 brings OGNL 3.4.17**, which fixes CVE-2026-113730 (GHSA-crwc-vw2r-qr6m), a bypass of OGNL's stricter-invocation block list. Bastillion does not evaluate expressions from users, so it was not exploitable here; the update clears the alert.
 
 ### Fixed
 
@@ -17,7 +26,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Dependencies
 
-- `org.thymeleaf:thymeleaf` 3.1.5 → 3.1.6 (`ognl:ognl` 3.3.4 → 3.4.17)
 - `org.apache.commons:commons-fileupload2-jakarta` 2.0.0-SNAPSHOT → `commons-fileupload2-jakarta-servlet6` 2.0.0-M5
 - `com.google.code.gson:gson` 2.14.0 → 2.15.0
 - Test and build only: `org.apache.sshd:sshd-core`/`sshd-sftp` 2.20.0 → 2.20.1, `com.unboundid:unboundid-ldapsdk` 7.0.5 → 7.0.6, `maven-surefire-plugin` 3.6.0 → 3.6.1, `maven-enforcer-plugin` 3.6.3 → 3.7.0
