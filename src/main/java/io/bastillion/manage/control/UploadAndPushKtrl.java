@@ -31,21 +31,38 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.Serializable;
+import java.nio.file.Files;
 import java.security.GeneralSecurityException;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Iterator;
 import java.util.List;
+import java.util.UUID;
 
 public class UploadAndPushKtrl extends BaseKontroller {
 
     private static final Logger log = LoggerFactory.getLogger(UploadAndPushKtrl.class);
     public static final String UPLOAD_PATH = AppConfig.CONFIG_DIR + "../upload";
 
+    /**
+     * Session attribute holding this session's staged upload. The file to push is looked up
+     * here, never taken from the request: UPLOAD_PATH is shared by every user, so a filename
+     * from the request let one user push, overwrite or delete another user's staged file.
+     */
+    static final String STAGED_UPLOAD = "stagedUpload";
+
+    /**
+     * An upload waiting to be pushed: storedName is the random name it is staged under in
+     * UPLOAD_PATH, fileName the uploaded file's own name, used only on the remote system.
+     */
+    record StagedUpload(String storedName, String fileName) implements Serializable {
+    }
+
     @Model(name = "upload")
     File upload;
-    @Model(name = "uploadFileName", params = {"uploadFileName"})
+    @Model(name = "uploadFileName")
     String uploadFileName;
     @Model(name = "idList", params = {"idList"})
     List<Long> idList = new ArrayList<>();
@@ -99,16 +116,17 @@ public class UploadAndPushKtrl extends BaseKontroller {
                         throw new IOException("Failed to create upload directory: " + path);
                     }
 
-                    upload = new File(path, uploadFileName);
+                    // a previous upload from this session that was never pushed is replaced
+                    discardStagedUpload();
 
-                    // Use NIO stream copy
+                    // staged under a random name rather than the uploaded file's own, and
+                    // never over an existing file, so no other upload can collide with it
+                    String storedName = UUID.randomUUID().toString();
+                    upload = new File(path, storedName);
                     try (var input = item.getInputStream()) {
-                        java.nio.file.Files.copy(
-                                input,
-                                upload.toPath(),
-                                java.nio.file.StandardCopyOption.REPLACE_EXISTING
-                        );
+                        Files.copy(input, upload.toPath());
                     }
+                    getRequest().getSession().setAttribute(STAGED_UPLOAD, new StagedUpload(storedName, uploadFileName));
                 } else {
                     pushDir = item.getString();
                 }
@@ -133,14 +151,10 @@ public class UploadAndPushKtrl extends BaseKontroller {
     @Kontrol(path = "/admin/push", method = MethodType.POST)
     public String push() throws ServletException {
 
-        // uploadFileName is bound directly from this request's own parameter (carried forward
-        // as a hidden field between push iterations), not re-derived server-side - without
-        // stripping it to a bare filename the same way uploadSubmit() already does, a crafted
-        // value like "../../../etc/passwd" would let an already-authenticated admin read an
-        // arbitrary local file (pushed via SFTP to a system they control) or delete an
-        // arbitrary local file below, instead of only ever touching UPLOAD_PATH.
-        if (uploadFileName != null) {
-            uploadFileName = new File(uploadFileName).getName();
+        // the file to push is the one this session uploaded, never one named by the request
+        StagedUpload staged = (StagedUpload) getRequest().getSession().getAttribute(STAGED_UPLOAD);
+        if (staged != null) {
+            uploadFileName = staged.fileName();
         }
 
         try {
@@ -150,6 +164,12 @@ public class UploadAndPushKtrl extends BaseKontroller {
 
             //get next pending system
             pendingSystemStatus = SystemStatusDB.getNextPendingSystem(userId);
+            if (pendingSystemStatus != null && staged == null) {
+                // nothing uploaded in this session (or already pushed) - stop rather than
+                // have the page resubmit forever
+                log.warn("Push requested with no staged upload for this session");
+                pendingSystemStatus = null;
+            }
             if (pendingSystemStatus != null) {
                 //get session for system
                 SchSession session = null;
@@ -164,7 +184,7 @@ public class UploadAndPushKtrl extends BaseKontroller {
                 if (session != null) {
 
                     //push upload to system
-                    currentSystemStatus = SSHUtil.pushUpload(pendingSystemStatus, session.getSession(), UPLOAD_PATH + "/" + uploadFileName, pushDir + "/" + uploadFileName);
+                    currentSystemStatus = SSHUtil.pushUpload(pendingSystemStatus, session.getSession(), new File(UPLOAD_PATH, staged.storedName()).getPath(), pushDir + "/" + staged.fileName());
 
                     //update system status
                     SystemStatusDB.updateSystemStatus(currentSystemStatus, userId);
@@ -176,8 +196,8 @@ public class UploadAndPushKtrl extends BaseKontroller {
 
             //if push has finished to all servers then delete uploaded file
             if (pendingSystemStatus == null) {
-                File delFile = new File(UPLOAD_PATH, uploadFileName);
-                FileUtils.deleteQuietly(delFile);
+                discardStagedUpload();
+                File delFile;
 
 
                 //delete all expired files in upload path
@@ -209,6 +229,17 @@ public class UploadAndPushKtrl extends BaseKontroller {
                 getRequest().getParameter(SecurityFilter._CSRF));
 
         return "/admin/upload_result.html";
+    }
+
+    /**
+     * deletes this session's staged upload, if any, and forgets it
+     */
+    private void discardStagedUpload() {
+        StagedUpload staged = (StagedUpload) getRequest().getSession().getAttribute(STAGED_UPLOAD);
+        if (staged != null) {
+            FileUtils.deleteQuietly(new File(UPLOAD_PATH, staged.storedName()));
+            getRequest().getSession().removeAttribute(STAGED_UPLOAD);
+        }
     }
 
 }

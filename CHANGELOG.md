@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Security
+
+- **Moderate: one user could push, overwrite or delete another user's upload.** Upload & Push staged every file in one directory shared by all users, under the uploaded file's own name, and pushed whichever file the request named. A signed-in administrator who knew or guessed the name of a file another user had uploaded but not yet finished pushing could push it to a system of their own and read it, upload a file of the same name so the other user pushed their content instead (to systems outside their own profiles), or delete it. Each upload is now staged under a random name, kept in the uploader's session, and only that session can push or delete it. Found by Liam Giannini (@Liam-G).
+
 ## [6.0.3]
 
 ### Changed
