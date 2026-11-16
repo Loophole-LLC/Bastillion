@@ -416,19 +416,9 @@ the key, unless this exact key is already sitting in `authorized_keys` on every 
 first. The Settings page requires an extra confirmation checkbox once you have systems
 registered, precisely because of this.
 
-**Already have systems registered and need to rotate the key anyway?** Pre-stage the new key
-through Bastillion itself rather than editing `authorized_keys` by hand everywhere:
-
-1. Set `FORCE_USER_KEY_GENERATION=false` so **Manage SSH Keys → Add SSH Key** lets you paste
-   an existing public key instead of only generating a new one.
-2. Add the new key there against a profile covering all your systems, and confirm (under
-   Manage SSH Keys, or each system's status) that it's actually landed everywhere — keep
-   `AUTH_KEYS_REFRESH_INTERVAL` in mind, since that's what pushes it out.
-3. Only once you're sure it's on every system, replace the application key in Settings.
-4. Set `FORCE_USER_KEY_GENERATION` back to its previous value, then once you've confirmed
-   the new application key has propagated to every system (again, mind
-   `AUTH_KEYS_REFRESH_INTERVAL`), remove the key you added in step 2 from Manage SSH Keys —
-   it was only staged there to pre-seed `authorized_keys` and isn't needed going forward.
+**Already have systems registered?** See
+[Rotating the application key](#rotating-the-application-key) below: the new key has to be on
+every system before Bastillion switches to it.
 
 For scripted/headless setups, the same thing can be done via environment variables and a
 restart instead:
@@ -461,6 +451,53 @@ the key itself:
 #   ed448  - Extra-strong (≈ RSA-8192, slower and less supported)
 export SSH_KEY_TYPE=ed25519
 ```
+
+#### Rotating the application key
+
+Use this to replace the application key once systems are registered, whether on a schedule
+or because the key may have been exposed. The rule is to put the new key on every system
+**before** Bastillion switches to it, so it never loses access part-way through.
+
+Before you start, generate the new key pair on a secure machine (for example
+`ssh-keygen -t ed25519 -f bastillion_new`) and sign in with a Manager account. The steps
+depend on `KEY_MANAGEMENT` (see SSH Key Management under [Configuration](#configuration)).
+
+**With `KEY_MANAGEMENT=manage` (the default).** Bastillion writes each system's
+`authorized_keys` itself, so it can stage the new key and remove the old one for you.
+
+1. **Allow pasting an existing public key.** Restart Bastillion with
+   `FORCE_USER_KEY_GENERATION=false`. Otherwise **Add SSH Key** only generates new keys.
+2. **Stage the new key on every system.** Under **Manage SSH Keys → Add SSH Key**, paste the
+   new *public* key (`bastillion_new.pub`) and set Profile to **All Systems**. Saving pushes
+   it to every registered system straight away.
+3. **Check it reached every system.** Every system under **Manage → Systems** should show
+   **Success**. Fix any that failed or were unreachable before going on: once you switch,
+   Bastillion can't reach a system that doesn't have the new key.
+4. **Switch Bastillion to the new key.** Under **Settings → Replace Application SSH Key**,
+   paste the new private key, public key and passphrase (if any), and tick the confirmation
+   box. It takes effect immediately, with no restart.
+5. **Remove the old key from every system.** On its next refresh of a system (every
+   `AUTH_KEYS_REFRESH_INTERVAL` minutes, 120 by default), Bastillion rewrites
+   `authorized_keys` with the new key and without the old one. Then delete the key you added
+   in step 2 from **Manage SSH Keys**; it's no longer needed.
+6. **Restore the setting.** Restart with `FORCE_USER_KEY_GENERATION` back to its previous
+   value.
+
+**With `KEY_MANAGEMENT=append`.** Bastillion only adds its own key and never removes
+anything from `authorized_keys`, and **Manage SSH Keys** is hidden, so staging and cleanup
+are done with your own tooling (Ansible, Puppet, and so on).
+
+1. Add the new public key to `authorized_keys` on every system.
+2. Switch Bastillion to the new key under **Settings → Replace Application SSH Key**.
+3. Remove the **old** public key from every system. Bastillion won't do this in `append`
+   mode, and after a suspected compromise this is the step that cuts off the old key.
+
+**After a suspected compromise**, also confirm that every system has dropped the old key
+(a system that was offline keeps it until a refresh or your tooling reaches it), and rotate
+any user keys and Bastillion passwords that may also have been exposed.
+
+Each Bastillion installation has its own application key, so with several installations,
+rotate each one separately.
 </details>
 
 <details>
