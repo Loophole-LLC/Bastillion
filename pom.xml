@@ -211,7 +211,7 @@
         <dependency>
             <groupId>org.eclipse.jetty.ee10</groupId>
             <artifactId>jetty-ee10-webapp</artifactId>
-            <version>12.1.14</version>
+            <version>12.1.15</version>
         </dependency>
         <!-- JAAS LoginModule SPI (LdapLoginModule, AbstractLoginModule, ObjectCallback) used
              directly by ExternalAuthUtil - Jetty 12 dropped the standalone jetty-jaas
