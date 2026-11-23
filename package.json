@@ -15,7 +15,7 @@
     "@popperjs/core": "2.11.8",
     "bootstrap": "5.3.9",
     "floatthead": "2.2.5",
-    "jquery": "4.0.0",
+    "jquery": "4.1.0",
     "jquery-ui": "1.14.2"
   }
 }
